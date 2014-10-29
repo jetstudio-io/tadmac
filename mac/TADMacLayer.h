@@ -31,6 +31,7 @@
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
 #include <MacPktTAD_m.h>
+#include <MacPkt_m.h>
 
 using namespace std;
 
@@ -43,7 +44,6 @@ class MacPktTAD;
  *
  */
 class MIXIM_API TADMacLayer: public BaseMacLayer {
-    using BaseMacLayer::finish;
 private:
     /** @brief Copy constructor is not allowed.
      */
@@ -54,22 +54,18 @@ private:
 
 public:
     TADMacLayer() :
-            BaseMacLayer(), macQueue(), nbTxDataPackets(0), nbTxWB(0), nbRxDataPackets(0),
-                    nbRxWB(0), nbMissedAcks(0), nbRecvdAcks(0), nbDroppedDataPackets(0),
-                    nbTxAcks(0),
-                    TSR_length(16), wakeupInterval(0.5), waitCCA(0.1), waitWB(0.3),
-                    waitACK(0.3), waitDATA(0.3), sysClock(0.001), alpha(0.5),
-                    macState(INIT), startTADMAC(NULL), wakeup(NULL),
-                    waitWBTimeout(NULL), receivedWB(NULL), ccaTimeout(NULL), sentData(NULL),
-                    resendData(NULL), receivedACK(NULL), ccaWBTimeout(NULL),
-                    sentWB(NULL), waitDATATimeout(NULL), receivedDATA(NULL),
-                    ccaACKTimeout(NULL), sentACK(NULL),
-                    lastDataPktSrcAddr(), lastDataPktDestAddr(),
-                    txAttempts(0), droppedPacket(), nicId(-1), queueLength(0), animation(false),
-                    bitrate(0), txPower(0),
-                    useMacAcks(0), maxTxAttempts(0), stats(false), first_time(1), wakeupIntervalLook(0),
-                    logFileName("log.csv"), useCorrection(true), numberWakeup(0), sysClockFactor(75), numberSender(1),
-                    startAt(0.001)
+            BaseMacLayer(), macQueue(),
+                nbTxDataPackets(0), nbTxWB(0), nbRxDataPackets(0), nbRxWB(0), nbMissedAcks(0), nbRecvdAcks(0), nbDroppedDataPackets(0), nbTxAcks(0),
+                TSR_length(16), wakeupInterval(0.5), waitCCA(0.1), waitWB(0.3),
+                waitACK(0.3), waitDATA(0.3), sysClock(0.001), alpha(0.5),
+                macState(INIT),
+                start(NULL), rxWBTimeout(NULL), WBreceived(NULL), ccaDATATimeout(NULL), DATAsent(NULL), waitACKTimeout(NULL), ACKreceived(NULL),
+                wakeup(NULL), ccaWBTimeout(NULL), WBsent(NULL), rxDATATimeout(NULL), DATAreceived(NULL), ccaACKTimeout(NULL), ACKsent(NULL),
+                lastDataPktSrcAddr(), lastDataPktDestAddr(),
+                txAttempts(0), droppedPacket(), nicId(-1), queueLength(0), animation(false),
+                bitrate(0), txPower(0),
+                useMacAcks(0), maxTxAttempts(0), stats(false), first_time(1), wakeupIntervalLook(0),
+                numberWakeup(0), sysClockFactor(75), numberSender(1)
     {}
 
     typedef MacPktTAD* macpkttad_ptr_t;
@@ -121,16 +117,16 @@ protected:
 
     // Note type
     enum ROLES {
-        NODE_RECEIVER,
-        NODE_SENDER,
-        NODE_TRANSMITER
+        NODE_RECEIVER,      // 0
+        NODE_SENDER,        // 1
+        NODE_TRANSMITER     // 2
     };
     ROLES role;
 
     int TSR[16];
     int TSR_length;
     /** @brief store the moment wakeup, will be used to calculate the rest time */
-    simtime_t start;
+    simtime_t startWake;
     /** store the moment the sender wait for WB */
     simtime_t timeWaitWB;
 
@@ -142,67 +138,68 @@ protected:
     double sysClock;
     double alpha;
 
-    /** @brief MAC states
-     */
+    /** @brief MAC states */
     enum States {
         INIT,	        //0
         SLEEP,	        //1
         // The stages for sender
         WAIT_WB,        //2
-        CCA,            //3
-        SEND_DATA,      //4
+        CCA_DATA,       //3
+        SENDING_DATA,   //4
         WAIT_ACK,		//5
         // The stages for receiver
         CCA_WB,         //6
-        SEND_WB,        //7
+        SENDING_WB,     //7
         WAIT_DATA,      //8
         CCA_ACK,        //9
-        SEND_ACK,       //10
+        SENDING_ACK,    //10
     };
     /** @brief The current state of the protocol */
     States macState;
 
     /** @brief Types of messages (self messages and packets) the node can process **/
     enum TYPES {
-        TADMAC_START,           //0
-        TADMAC_WAKE_UP,         //1
+        START,           //0
         // The messages used by sender
-        TADMAC_WB_TIMEOUT,      //2
-        TADMAC_RECEIVED_WB,     //3
-        TADMAC_CCA_TIMEOUT,     //4
-        TADMAC_SENT_DATA,       //5
-        TADMAC_RESEND_DATA,     //6
-        TADMAC_RECEIVED_ACK,    //7
+        WAKE_UP_DATA,    //1    // Current state SLEEP, called when received DATA packet from upper layer network
+        RX_WB_TIMEOUT,   //2    // Current state WAIT_WB, next state SLEEP
+        WB_RECEIVED,     //3    // This event called when received WB - Current state WAIT_WB, next state CCA_DATA
+        CCA_DATA_TIMEOUT,//4    // Current state CCA_DATA, next state SENDING_DATA
+        DATA_SENT,       //5    // current state SENDING_DATA, next state WAIT_ACK
+        WAIT_ACK_TIMEOUT,//6    // current state WAIT_ACK, next state WAIT_WB
+        ACK_RECEIVED,    //7    // This event called when received ACK
         // The message used by receiver
-        TADMAC_CCA_WB_TIMEOUT,  //8
-        TADMAC_SENT_WB,         //9
-        TADMAC_DATA_TIMEOUT,    //10
-        TADMAC_RECEIVED_DATA,   //11
-        TADMAC_CCA_ACK_TIMEOUT, //12
-        TADMAC_SENT_ACK,        //13
+        WAKE_UP,         //8    // Current state SLEEP, next state CCA_WB
+        CCA_WB_TIMEOUT,  //9    // current state CCA_WB, next state SENDING_WB
+        WB_SENT,         //10   // current state SENDING_WB, next state WAIT_DATA
+        RX_DATA_TIMEOUT, //11   // current state WAIT_DATA, next state SLEEP
+        DATA_RECEIVED,   //12   // This event called when receive DATA packet, current state WAIT_DATA, next state CCA_ACK
+        CCA_ACK_TIMEOUT, //13   // current state CCA_ACK, next state SENDING_ACK
+        ACK_SENT,        //14   // current state SENDING_ACK, next state SLEEP
         // The message used to transmit between the node
-        TADMAC_WB,              //14
-        TADMAC_DATA,            //15
-        TADMAC_ACK              //16
+        WB,              //15   // WB packet
+        DATA,            //16   // DATA packet received from network upper layer or physical lower layer
+        ACK              //17   // ACK packet
     };
 
     // The messages used as events
-    cMessage *startTADMAC; // call to start protocol TADMAC
-    cMessage *wakeup;
+    cMessage *start;            // call to start protocol TADMAC
     // The messages events used for sender
-    cMessage *waitWBTimeout;
-    cMessage *receivedWB;
-    cMessage *ccaTimeout;
-    cMessage *sentData;
-    cMessage *resendData;
-    cMessage *receivedACK;
+    cMessage *wakeupDATA;       // Type WAKE_UP_DATA
+    cMessage *rxWBTimeout;      // Type RX_WB_TIMEOUT
+    cMessage *WBreceived;       // Type WB_RECEIVED
+    cMessage *ccaDATATimeout;   // Type CCA_DATA_TIMEOUT
+    cMessage *DATAsent;         // Type DATA_SENT
+    cMessage *waitACKTimeout;   // Type WAIT_ACK_TIMEOUT
+    cMessage *ACKreceived;      // Type ACK_RECEIVED
     // The messages events used for receiver
-    cMessage *ccaWBTimeout;
-    cMessage *sentWB;
-    cMessage *waitDATATimeout;
-    cMessage *receivedDATA;
-    cMessage *ccaACKTimeout;
-    cMessage *sentACK;
+    cMessage *wakeup;           // Type WAKE_UP
+    cMessage *ccaWBTimeout;     // Type CCA_WB_TIMEOUT
+    cMessage *WBsent;           // Type WB_SENT
+    cMessage *rxDATATimeout;    // Type RX_DATA_TIMEOUT
+    cMessage *DATAreceived;     // Type DATA_RECEIVED
+    cMessage *ccaACKTimeout;    // Type CCA_ACK_TIMEOUT
+    cMessage *ACKsent;          // Type ACK_SENT
 
     /** @name Help variables for the acknowledgment process. */
     /*@{*/
@@ -241,30 +238,9 @@ protected:
     bool stats;
 
     /** @brief Possible colors of the node for animation */
-    enum STAGE_COLOR {
+    enum COLOR {
         GREEN = 1, BLUE = 2, RED = 3, BLACK = 4, YELLOW = 5
     };
-
-    /** @brief Internal function to change the color of the node */
-    void changeDisplayColor(STAGE_COLOR color);
-
-    /** @brief Internal function to send the first packet in the queue */
-    void sendDataPacket();
-
-    /** @brief Internal function to send an ACK */
-    void sendMacAck();
-
-    /** @brief Internal function to send one WB */
-    void sendWB();
-
-    /** @brief Internal function to attach a signal to the packet */
-    void attachSignal(macpkt_ptr_t macPkt);
-
-    /** @brief Internal function to add a new packet from upper to the queue */
-    bool addToQueue(cMessage * msg);
-
-    /** @brief Calculate the next wakeup interval*/
-    void calculateNextInterval(cMessage *msg=NULL);
 
     /**
      * These variables used for calculate the error correlator.
@@ -274,7 +250,6 @@ protected:
     double idle_array[2];
     double wakeupIntervalLook;
 
-    const char *logFileName;
     bool useCorrection;
     bool usePriority;
     bool useWBMiss;
@@ -302,7 +277,6 @@ protected:
 
     static const int maxCCAattempts = 2;
     int ccaAttempts;
-    double startAt;
     int wbMiss;
 
     int nbCollision;
@@ -312,6 +286,30 @@ protected:
 
     ofstream logFile;
     ofstream log_tsr;
+
+    /** @brief Change MAC state */
+    void changeMACState();
+
+    /** @brief Internal function to change the color of the node */
+    void changeDisplayColor(COLOR color);
+
+    /** @brief Internal function to send the first packet in the queue */
+    void sendDataPacket();
+
+    /** @brief Internal function to send an ACK */
+    void sendMacAck();
+
+    /** @brief Internal function to send one WB */
+    void sendWB();
+
+    /** @brief Internal function to attach a signal to the packet */
+    void attachSignal(macpkt_ptr_t macPkt);
+
+    /** @brief Internal function to add a new packet from upper to the queue */
+    bool addToQueue(cMessage * msg);
+
+    /** @brief Calculate the next wakeup interval*/
+    void calculateNextInterval(cMessage *msg=NULL);
 
     void scheduleNextWakeup();
     void writeLog();

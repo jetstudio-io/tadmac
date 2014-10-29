@@ -58,31 +58,24 @@ simple TADMacLayer extends BaseMacLayer
 		int role = default(1);
 		
 		// time for CCA
-		double waitCCA @unit(s) = default(0.1s);
+		double waitCCA @unit(s) = default(0.005s); //CCA time 5ms
 		// time to wait WB - used on sender only because receiver send WB
-		double waitWB @unit(s) = default(0.3s);
+		double waitWB @unit(s) = default(0.25s);  //max time for wait WB is 250ms
 		// time to wait ACK - used on sender
-		double waitACK @unit(s) = default(0.3s);
+		double waitACK @unit(s) = default(0.01s); //time to wait ACK is 10ms
 		// time to wait DATA - used on receiver
-		double waitDATA @unit(s) = default(0.3s);
+		double waitDATA @unit(s) = default(0.01s); //time to wait DATA is 10ms
 		// system clock - we calculate by 1ms
 		double sysClock @unit(s) = default(0.001s);
-		// system clock - we calculate by 1ms
-		int sysClockFactor = default(1);
+		// system clock factor
+		int sysClockFactor = default(75);
 		// weighting factor
 		double alpha = default(0.5);
 		// wake up interval for each node - used in receiver only because in sender, node wake up when it has data to send
-		double WUIInit @unit(s) = default(0.5s);
+		double WUIInit @unit(s) = default(0.1s);  // value initialization for wakeup interval: 100ms
 		
-		bool useCorrection = default(true);
-		bool usePriority = default(true);
-		bool useWBMiss = default(true);
-		
-		string logFileName = default("log.csv");
 		// used to define number sender in network - for receiver node
 		int numberSender = default(1);
-		// moment sender start - to avoid 2 node always wakeup in same time
-		double startAt @unit(s) = default(0.001s);
 		
 		// debug switch
         bool debug = default(false);
@@ -96,8 +89,8 @@ simple TADMacLayer extends BaseMacLayer
         // not?
         bool animation = default(true);
         
-        // bit rate 
-        double bitrate @unit(bps) = default(19200 bps);
+        // bit rate 250kbps TI CC2420 radio chip
+        double bitrate @unit(bps) = default(250000 bps);
         
         //tx power [mW]
         double txPower @unit(mW) = default(50 mW);

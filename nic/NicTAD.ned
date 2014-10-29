@@ -19,6 +19,6 @@ import org.mixim.modules.nic.WirelessNicBattery;
 
 module NicTAD extends WirelessNicBattery
 {
-//    parameters:
-//        macType = default("tadmac.modules.mac.TADMacLayer");
+    parameters:
+        macType = default("tadmac.modules.mac.TADMacLayer");
 }
