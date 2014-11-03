@@ -32,6 +32,7 @@
 #include "MacToPhyInterface.h"
 #include <stdlib.h>
 #include <time.h>
+#include <MacPkt_m.h>
 
 Define_Module(TADMacLayer)
 
@@ -88,58 +89,34 @@ void TADMacLayer::initialize(int stage) {
         WATCH(macState);
     } else if (stage == 1) {
 
-        /**
-         * Initialization of events for sender
-         */
-        start = new cMessage("start");
-        start->setKind(START);
-
-        wakeupDATA = new cMessage("WAKE_UP_DATA");
-        wakeupDATA->setKind(WAKE_UP_DATA);
-
-        rxWBTimeout = new cMessage("RX_WB_TIMEOUT");
-        rxWBTimeout->setKind(RX_WB_TIMEOUT);
-
-        WBreceived = new cMessage("WB_RECEIVED");
-        WBreceived->setKind(WB_RECEIVED);
-
-        ccaDATATimeout = new cMessage("CCA_DATA_TIMEOUT");
-        ccaDATATimeout->setKind(CCA_DATA_TIMEOUT);
-
-        DATAsent = new cMessage("DATA_SENT");
-        DATAsent->setKind(DATA_SENT);
-
-        waitACKTimeout = new cMessage("WAIT_ACK_TIMEOUT");
-        waitACKTimeout->setKind(WAIT_ACK_TIMEOUT);
-
-        ACKreceived = new cMessage("ACK_RECEIVED");
-        ACKreceived->setKind(ACK_RECEIVED);
-
-        /**
-         * Initialization of events for sender
-         */
-        wakeup = new cMessage("WAKE_UP");
-        wakeup->setKind(WAKE_UP);
-
-        ccaWBTimeout = new cMessage("CCA_WB_TIMEOUT");
-        ccaWBTimeout->setKind(CCA_WB_TIMEOUT);
-
-        WBsent = new cMessage("WB_SENT");
-        WBsent->setKind(WB_SENT);
-
-        rxDATATimeout = new cMessage("RX_DATA_TIMEOUT");
-        rxDATATimeout->setKind(RX_DATA_TIMEOUT);
-
-        DATAreceived = new cMessage("DATA_RECEIVED");
-        DATAreceived->setKind(DATA_RECEIVED);
-
-        ccaACKTimeout = new cMessage("CCA_ACK_TIMEOUT");
-        ccaACKTimeout->setKind(CCA_ACK_TIMEOUT);
-
-        ACKsent = new cMessage("ACK_SENT");
-        ACKsent->setKind(ACK_SENT);
-
         if (role == NODE_RECEIVER) {
+            /**
+             * Initialization of events for recevier
+             */
+            start = new cMessage("start");
+            start->setKind(START);
+
+            wakeup = new cMessage("WAKE_UP");
+            wakeup->setKind(WAKE_UP);
+
+            ccaWBTimeout = new cMessage("CCA_WB_TIMEOUT");
+            ccaWBTimeout->setKind(CCA_WB_TIMEOUT);
+
+            WBsent = new cMessage("WB_SENT");
+            WBsent->setKind(WB_SENT);
+
+            rxDATATimeout = new cMessage("RX_DATA_TIMEOUT");
+            rxDATATimeout->setKind(RX_DATA_TIMEOUT);
+
+            DATAreceived = new cMessage("DATA_RECEIVED");
+            DATAreceived->setKind(DATA_RECEIVED);
+
+            ccaACKTimeout = new cMessage("CCA_ACK_TIMEOUT");
+            ccaACKTimeout->setKind(CCA_ACK_TIMEOUT);
+
+            ACKsent = new cMessage("ACK_SENT");
+            ACKsent->setKind(ACK_SENT);
+
             int nodeIdx = getNode()->getIndex();
             TSR_length = 8;
             // allocate memory & initialize for TSR bank
@@ -159,9 +136,10 @@ void TADMacLayer::initialize(int stage) {
              */
             routeTable = new LAddress::L2Type[numberSender+1];
             for (int i = 1; i <= numberSender; i++) {
-                ostringstream converter;
-                converter << "00:00:00:00:00:0" << (i + nodeIdx);
-                routeTable[i].setAddress(converter.str().c_str());
+//                ostringstream converter;
+//                converter << "00:00:00:00:00:0" << (i + nodeIdx);
+//                routeTable[i].setAddress(converter.str().c_str());
+                routeTable[i] = i;
             }
             // allocate memory & initialize for nodeWakeupInterval & nextWakeupIntervalTime
             nodeWakeupInterval = new double[numberSender+1];
@@ -198,7 +176,35 @@ void TADMacLayer::initialize(int stage) {
                 nodeChoosen[i] = 0;
                 nodeBroken[i] = 0;
             }
+        } else {
+            /**
+             * Initialization of events for sender
+             */
+            start = new cMessage("start");
+            start->setKind(START);
+
+            wakeupDATA = new cMessage("WAKE_UP_DATA");
+            wakeupDATA->setKind(WAKE_UP_DATA);
+
+            rxWBTimeout = new cMessage("RX_WB_TIMEOUT");
+            rxWBTimeout->setKind(RX_WB_TIMEOUT);
+
+            WBreceived = new cMessage("WB_RECEIVED");
+            WBreceived->setKind(WB_RECEIVED);
+
+            ccaDATATimeout = new cMessage("CCA_DATA_TIMEOUT");
+            ccaDATATimeout->setKind(CCA_DATA_TIMEOUT);
+
+            DATAsent = new cMessage("DATA_SENT");
+            DATAsent->setKind(DATA_SENT);
+
+            waitACKTimeout = new cMessage("WAIT_ACK_TIMEOUT");
+            waitACKTimeout->setKind(WAIT_ACK_TIMEOUT);
+
+            ACKreceived = new cMessage("ACK_RECEIVED");
+            ACKreceived->setKind(ACK_RECEIVED);
         }
+
         nbCollision = 0;
         numberWakeup = 0;
         scheduleAt(0.0, start);
@@ -206,6 +212,27 @@ void TADMacLayer::initialize(int stage) {
 }
 
 TADMacLayer::~TADMacLayer() {
+
+    if (role == NODE_RECEIVER) {
+        cancelAndDelete(start);
+        cancelAndDelete(wakeup);
+        cancelAndDelete(ccaWBTimeout);
+        cancelAndDelete(WBsent);
+        cancelAndDelete(rxDATATimeout);
+        cancelAndDelete(DATAreceived);
+        cancelAndDelete(ccaACKTimeout);
+        cancelAndDelete(ACKsent);
+    } else {
+        cancelAndDelete(start);
+        cancelAndDelete(wakeupDATA);
+        cancelAndDelete(rxWBTimeout);
+        cancelAndDelete(WBreceived);
+        cancelAndDelete(ccaDATATimeout);
+        cancelAndDelete(DATAsent);
+        cancelAndDelete(waitACKTimeout);
+        cancelAndDelete(ACKreceived);
+    }
+
     MacQueue::iterator it;
     for (it = macQueue.begin(); it != macQueue.end(); ++it) {
         delete (*it);
@@ -243,7 +270,7 @@ cObject* TADMacLayer::setUpControlInfo(cMessage * const pMsg, const LAddress::L2
 bool TADMacLayer::addToQueue(cMessage * msg) {
     if (macQueue.size() >= queueLength) {
         // queue is full, message has to be deleted
-        debugEV << "New packet arrived, but queue is FULL, so new packet is"
+        cout << simTime() << ":New packet arrived, but queue is FULL, so new packet is"
                   " deleted\n";
         msg->setName("MAC ERROR");
         msg->setKind(PACKET_DROPPED);
@@ -269,10 +296,19 @@ bool TADMacLayer::addToQueue(cMessage * msg) {
     macPkt->encapsulate(static_cast<cPacket*>(msg));
 
     macQueue.push_back(macPkt);
-    debugEV << "Max queue length: " << queueLength << ", packet put in queue"
+    cout << simTime() << ":Max queue length: " << queueLength << ", packet put in queue"
               "\n  queue size: " << macQueue.size() << " macState: "
               << macState << endl;
     return true;
+}
+
+void TADMacLayer::removeFromQueue() {
+    if (macQueue.size() >= 1) {
+        cMessage *tmp = macQueue.front();
+        macQueue.pop_front();
+        delete tmp;
+        cout << simTime() << ": Drop packet in queue, queue size after " << macQueue.size() << endl;
+    }
 }
 
 /**
@@ -280,6 +316,11 @@ bool TADMacLayer::addToQueue(cMessage * msg) {
  * If already awake, change to Tx state -> send data
  */
 void TADMacLayer::handleUpperMsg(cMessage *msg) {
+    // If this is receiver, we dont need to handle upper layer packet
+    if (role == NODE_RECEIVER) {
+        delete msg;
+        return;
+    }
     bool pktAdded = addToQueue(msg);
     if (!pktAdded)
         return;
@@ -301,12 +342,21 @@ void TADMacLayer::handleUpperMsg(cMessage *msg) {
  * Change state to SLEEP
  */
 void TADMacLayer::scheduleNextWakeup() {
-    changeDisplayColor(BLACK);
-    phy->setRadioState(MiximRadio::SLEEP);
-    macState = SLEEP;
-    // find the next wakeup time
-    simtime_t nextWakeup = 10000.0;
-    // @TODO: calculate next wakeup time
+//    changeDisplayColor(BLACK);
+//    phy->setRadioState(MiximRadio::SLEEP);
+//    macState = SLEEP;
+    simtime_t nextWakeup = 10000;
+    for (int i = 1; i <= numberSender; i++) {
+        // if already pass the wakeup moment for this node
+        // -> calculate nextwakeup for this node with 0 in TSR
+        if (nextWakeupTime[i] < simTime()) {
+            calculateNextInterval();
+        }
+        if (nextWakeupTime[i] < nextWakeup) {
+            nextWakeup = nextWakeupTime[i];
+            currentNode = i;
+        }
+    }
     scheduleAt(nextWakeup, wakeup);
 }
 
@@ -350,9 +400,8 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
         // Call at first time after initialize the note
         case INIT:
             if (msg->getKind() == START) {
-                changeDisplayColor(BLACK);
-                phy->setRadioState(MiximRadio::SLEEP);
                 macState = SLEEP;
+                changeMACState();
                 // Sender don't need to schedule wakeup because it wakeup to send data
                 return;
             }
@@ -360,6 +409,7 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
         // This node is sleeping & have data to send
         case SLEEP:
             if (msg->getKind() == WAKE_UP_DATA) {
+                cout << simTime() << ":SLEEP & WAKE_UP_DATA" << endl;
                 // MAC state is CCA
                 macState = WAIT_WB;
                 changeMACState();
@@ -377,6 +427,8 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
         case WAIT_WB:
             // If this message is event
             if (msg->getKind() == RX_WB_TIMEOUT) {
+                cout << simTime() << ":WAIT_WB & RX_WB_TIMEOUT" << endl;
+                removeFromQueue();
                 // Turn back to SLEEP state
                 macState = SLEEP;
                 changeMACState();
@@ -493,6 +545,8 @@ void TADMacLayer::handleSelfMsgReceiver(cMessage *msg) {
         // Call at first time after initialize the note
         case INIT:
             if (msg->getKind() == START) {
+                macState = SLEEP;
+                changeMACState();
                 scheduleNextWakeup();
                 return;
             }
@@ -563,10 +617,13 @@ void TADMacLayer::handleSelfMsgReceiver(cMessage *msg) {
                     return;
                 }
                 // send mac packet to upper layer
+                cout << "before send up message" << endl;
                 sendUp(decapsMsg(mac));
+                cout << "before cancel event" << endl;
                 // cacel event
                 cancelEvent(rxDATATimeout);
                 // Calculate next wakeup interval
+                cout << "before calculateNextInterval" << endl;
                 calculateNextInterval(msg);
                 //cout << "calculateNextInterval" << endl;
 
@@ -663,107 +720,97 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
     /**
      * Use new adaptive function
      */
-    if (useWBMiss) {
-        nodeSumWUInt[currentNode] += nodeWakeupInterval[currentNode];
-        if (msg != NULL) {
-            macpkttad_ptr_t mac  = static_cast<macpkttad_ptr_t>(msg);
-            double idle = double(mac->getIdle()) / 1000.0;
-            int wbMiss = mac->getWbMiss();
-            mac = NULL;
-            nodeIdle[currentNode][1] = idle;
-            if (nodeIdle[currentNode][0] != 0 && nodeIdle[currentNode][1] != 0) {
-                // Calculate the TxInt of current node
-                double TxInt = (nodeSumWUInt[currentNode] + nodeIdle[currentNode][0] - nodeIdle[currentNode][1]) / (wbMiss + 1);
-                // We lock the TxInt / 2 for WUInt after
-                nodeWakeupIntervalLock[currentNode] = TxInt / 2;
-                // Next WUInt
-                nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode] - idle + sysClock;
-            } else {
-                nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
-                nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
-                if (nodeWakeupInterval[currentNode] < 0.02) {
-                    nodeWakeupInterval[currentNode] = 0.02;
-                }
-            }
-            // re-calculate the total WUInt between 2 times receipt data packet
-            nodeSumWUInt[currentNode] = 0;
-            nodeIdle[currentNode][0] = idle;
-            nodeIdle[currentNode][1] = 0;
-        } else {
-            // If we already calculated the WUInt convergent -> use this, don't need to calculate
-            if (nodeWakeupIntervalLock[currentNode] > 0) {
-                nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode];
-                //
-                nodeWakeupIntervalLock[currentNode] = 0;
-            } else {
-                nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
-                nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
-                if (nodeWakeupInterval[currentNode] < 0.02) {
-                    nodeWakeupInterval[currentNode] = 0.02;
-                }
-            }
-        }
-    } else {
-        if (useCorrection) {
+//    if (useWBMiss) {
+//        nodeSumWUInt[currentNode] += nodeWakeupInterval[currentNode];
+//        if (msg != NULL) {
+//            macpkttad_ptr_t mac  = static_cast<macpkttad_ptr_t>(msg);
+//            double idle = double(mac->getIdle()) / 1000.0;
+//            int wbMiss = mac->getWbMiss();
+//            mac = NULL;
+//            nodeIdle[currentNode][1] = idle;
+//            if (nodeIdle[currentNode][0] != 0 && nodeIdle[currentNode][1] != 0) {
+//                // Calculate the TxInt of current node
+//                double TxInt = (nodeSumWUInt[currentNode] + nodeIdle[currentNode][0] - nodeIdle[currentNode][1]) / (wbMiss + 1);
+//                // We lock the TxInt / 2 for WUInt after
+//                nodeWakeupIntervalLock[currentNode] = TxInt / 2;
+//                // Next WUInt
+//                nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode] - idle + sysClock;
+//            } else {
+//                nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
+//                nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
+//                if (nodeWakeupInterval[currentNode] < 0.02) {
+//                    nodeWakeupInterval[currentNode] = 0.02;
+//                }
+//            }
+//            // re-calculate the total WUInt between 2 times receipt data packet
+//            nodeSumWUInt[currentNode] = 0;
+//            nodeIdle[currentNode][0] = idle;
+//            nodeIdle[currentNode][1] = 0;
+//        } else {
+//            // If we already calculated the WUInt convergent -> use this, don't need to calculate
+//            if (nodeWakeupIntervalLock[currentNode] > 0) {
+//                nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode];
+//                //
+//                nodeWakeupIntervalLock[currentNode] = 0;
+//            } else {
+//                nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
+//                nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
+//                if (nodeWakeupInterval[currentNode] < 0.02) {
+//                    nodeWakeupInterval[currentNode] = 0.02;
+//                }
+//            }
+//        }
+//    } else {
             // calculate the correlator see code matlab in IWCLD_11/First_paper/Adaptive_MAC/Done_Codes/Test_For_IWCLD.m
-            if (mu * 100 == 0) {
-                double idle = 0;
-                int wbMiss = 0;
-                if (msg != NULL) {
-                    macpkttad_ptr_t mac  = static_cast<macpkttad_ptr_t>(msg);
-                    idle = double(mac->getIdle()) / 1000.0;
-                    wbMiss = mac->getWbMiss();
-                    mac = NULL;
-                    nodeIdle[currentNode][nodeIndex[currentNode]] = idle;
-                    nodeIndex[currentNode]++;
-                }
-                if (nodeIdle[currentNode][0] != 0 && nodeIdle[currentNode][1] != 0) {
-                    double WUInt_diff = (nodeIdle[currentNode][0] - nodeIdle[currentNode][1]) / 2;
-                    if (WUInt_diff * 100 != 0) {
-                        nodeWakeupIntervalLock[currentNode] = nodeWakeupInterval[currentNode] + WUInt_diff;
-    //                    cout << simTime() << "|" << nodeWakeupInterval[currentNode] << "|" << currentNode << "|" << WUInt_diff<< "|" << wbMiss<<endl;
-                        nodeWakeupInterval[currentNode] = (nodeWakeupIntervalLock[currentNode] - idle + sysClock * 2);
-                        if (nodeWakeupInterval[currentNode] < 0) {
-                            nodeWakeupInterval[currentNode] += nodeWakeupIntervalLock[currentNode];
-                            updateTSR(currentNode, 0);
-                        }
-                        nodeFirstTime[currentNode]++;
-                    }
-                    nodeIdle[currentNode][0] = nodeIdle[currentNode][1] = 0;
-                    nodeIndex[currentNode] = 0;
-                }
-            } else {
-                if (nodeIndex[currentNode] == 1) {
-                    nodeIndex[currentNode]--;
-                }
-                if (nodeWakeupIntervalLock[currentNode] * 100 == 0) {
-                    nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
-                    nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
-                    if (nodeWakeupInterval[currentNode] < 0.02) {
-                        nodeWakeupInterval[currentNode] = 0.02;
-                    }
-                } else {
-                    nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode];
-                }
+        if (mu * 100 == 0) {
+            double idle = 0;
+            // calculate only when receive data
+            if (msg != NULL) {
+                macpkttad_ptr_t mac  = static_cast<macpkttad_ptr_t>(msg);
+                idle = double(mac->getIdle()) / 1000.0;
+                mac = NULL;
+                nodeIdle[currentNode][nodeIndex[currentNode]] = idle;
+                nodeIndex[currentNode]++;
             }
-
-            if (nodeFirstTime[currentNode] == 2) {
-                nodeFirstTime[currentNode]++;
-            } else {
-                if (nodeFirstTime[currentNode] == 3) {
-                    nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode];
-                    nodeWakeupIntervalLock[currentNode] = 0;
-                    nodeFirstTime[currentNode] = 1;
+            if (nodeIdle[currentNode][0] != 0 && nodeIdle[currentNode][1] != 0) {
+                double WUInt_diff = (nodeIdle[currentNode][0] - nodeIdle[currentNode][1]) / 2;
+                if (WUInt_diff * 100 != 0) {
+                    nodeWakeupIntervalLock[currentNode] = nodeWakeupInterval[currentNode] + WUInt_diff;
+                    nodeWakeupInterval[currentNode] = (nodeWakeupIntervalLock[currentNode] - idle + sysClock * 2);
+                    if (nodeWakeupInterval[currentNode] < 0) {
+                        nodeWakeupInterval[currentNode] += nodeWakeupIntervalLock[currentNode];
+                        updateTSR(currentNode, 0);
+                    }
+                    nodeFirstTime[currentNode]++;
                 }
+                nodeIdle[currentNode][0] = nodeIdle[currentNode][1] = 0;
+                nodeIndex[currentNode] = 0;
             }
         } else {
-            nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
-            nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
-            if (nodeWakeupInterval[currentNode] < 0.02) {
-                nodeWakeupInterval[currentNode] = 0.02;
+            if (nodeIndex[currentNode] == 1) {
+                nodeIndex[currentNode]--;
+            }
+            if (nodeWakeupIntervalLock[currentNode] * 100 == 0) {
+                nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
+                nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
+                if (nodeWakeupInterval[currentNode] < 0.02) {
+                    nodeWakeupInterval[currentNode] = 0.02;
+                }
+            } else {
+                nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode];
             }
         }
-    }
+
+        if (nodeFirstTime[currentNode] == 2) {
+            nodeFirstTime[currentNode]++;
+        } else {
+            if (nodeFirstTime[currentNode] == 3) {
+                nodeWakeupInterval[currentNode] = nodeWakeupIntervalLock[currentNode];
+                nodeWakeupIntervalLock[currentNode] = 0;
+                nodeFirstTime[currentNode] = 1;
+            }
+        }
+//    }
     nextWakeupTime[currentNode] += nodeWakeupInterval[currentNode];
 }
 
@@ -838,6 +885,7 @@ void TADMacLayer::sendWB() {
     wb->setSrcAddr(myMacAddr);
     //wb->setDestAddr(LAddress::L2BROADCAST);
     wb->setDestAddr(routeTable[currentNode]);
+    wb->setName("WB");
     wb->setKind(WB);
     wb->setBitLength(headerLength);
 
@@ -854,6 +902,7 @@ void TADMacLayer::sendMacAck() {
     macpkt_ptr_t ack = new MacPkt();
     ack->setSrcAddr(myMacAddr);
     ack->setDestAddr(lastDataPktSrcAddr);
+    ack->setName("ACK");
     ack->setKind(ACK);
     ack->setBitLength(headerLength);
 
@@ -873,11 +922,13 @@ void TADMacLayer::sendDataPacket() {
     pkt->setSrcAddr(tmp->getSrcAddr());
 
     lastDataPktDestAddr = pkt->getDestAddr();
+    pkt->setName("DATA");
     pkt->setKind(DATA);
     pkt->setByteLength(16);
     pkt->setIdle(int(timeWaitWB.dbl() * 1000));
     attachSignal(pkt);
     sendDown(pkt);
+    macQueue.pop_front();
 }
 
 void TADMacLayer::attachSignal(macpkt_ptr_t macPkt) {

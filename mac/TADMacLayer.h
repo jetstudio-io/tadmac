@@ -31,7 +31,6 @@
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
 #include <MacPktTAD_m.h>
-#include <MacPkt_m.h>
 
 using namespace std;
 
@@ -307,6 +306,8 @@ protected:
 
     /** @brief Internal function to add a new packet from upper to the queue */
     bool addToQueue(cMessage * msg);
+
+    void removeFromQueue();
 
     /** @brief Calculate the next wakeup interval*/
     void calculateNextInterval(cMessage *msg=NULL);
