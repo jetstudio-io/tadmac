@@ -14,12 +14,11 @@
 //
 
 /**
- * Version 1.1: support multi senders
- * Version 2.0: WB is broadcast
+ * Version 1.0: WB is broadcast
  */
 
-#ifndef TADMACLAYER_H_
-#define TADMACLAYER_H_
+#ifndef FTAMACLAYER_H_
+#define FTAMACLAYER_H_
 
 #include <string>
 #include <sstream>
@@ -30,29 +29,28 @@
 #include "MiXiMDefs.h"
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
-#include <MacPktTAD_m.h>
+#include <MacPktFTA_m.h>
 
 using namespace std;
 
 class MacPktTAD;
 
 /**
- * @class TADMacLayer
+ * @class FTAMacLayer
  * @ingroup macLayer
  * @author Nguyen Van Thiep
- *
  */
-class MIXIM_API TADMacLayer: public BaseMacLayer {
+class MIXIM_API FTAMacLayer: public BaseMacLayer {
 private:
     /** @brief Copy constructor is not allowed.
      */
-    TADMacLayer(const TADMacLayer&);
+    FTAMacLayer(const FTAMacLayer&);
     /** @brief Assignment operator is not allowed.
      */
-    TADMacLayer& operator=(const TADMacLayer&);
+    FTAMacLayer& operator=(const FTAMacLayer&);
 
 public:
-    TADMacLayer() :
+    FTAMacLayer() :
             BaseMacLayer(), macQueue(),
                 nbTxDataPackets(0), nbTxWB(0), nbRxDataPackets(0), nbRxWB(0), nbMissedAcks(0), nbRecvdAcks(0), nbDroppedDataPackets(0), nbTxAcks(0),
                 TSR_length(16), wakeupInterval(0.5), waitCCA(0.1), waitWB(0.3),
@@ -67,9 +65,9 @@ public:
                 numberWakeup(0), sysClockFactor(75), numberSender(1)
     {}
 
-    typedef MacPktTAD* macpkttad_ptr_t;
+    typedef MacPktFTA* macpktfta_ptr_t;
 
-    virtual ~TADMacLayer();
+    virtual ~FTAMacLayer();
 
     /** @brief Initialization of the module and some variables*/
     virtual void initialize(int);
@@ -287,9 +285,6 @@ protected:
     int *nodeChoosen;
     int *nodeBroken;
 
-    ofstream logFile;
-    ofstream log_tsr;
-
     /** @brief Change MAC state */
     void changeMACState();
 
@@ -324,4 +319,4 @@ protected:
     virtual cObject* setUpControlInfo(cMessage *const pMsg, const LAddress::L2Type& pSrcAddr);
 };
 
-#endif /* TADMACLAYER_H_ */
+#endif /* FTAMacLayer_H_ */
