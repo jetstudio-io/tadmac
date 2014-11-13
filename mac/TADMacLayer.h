@@ -151,7 +151,7 @@ protected:
         SENDING_WB,     //7
         WAIT_DATA,      //8
         CCA_ACK,        //9
-        SENDING_ACK,    //10
+        SENDING_ACK     //10
     };
     /** @brief The current state of the protocol */
     States macState;
@@ -274,21 +274,11 @@ protected:
     int *nodeIndex;
     int **TSR_bank;
     int *nodeNumberWakeup;
-    int *nodePriority;
     LAddress::L2Type *routeTable;
     LAddress::L2Type receiverAddress;
 
     static const int maxCCAattempts = 2;
     int ccaAttempts;
-    int wbMiss;
-
-    int nbCollision;
-    int *nodeCollision;
-    int *nodeChoosen;
-    int *nodeBroken;
-
-    ofstream logFile;
-    ofstream log_tsr;
 
     /** @brief Change MAC state */
     void changeMACState();
@@ -311,13 +301,10 @@ protected:
     /** @brief Internal function to add a new packet from upper to the queue */
     bool addToQueue(cMessage * msg);
 
-    void removeFromQueue();
-
     /** @brief Calculate the next wakeup interval*/
     void calculateNextInterval(cMessage *msg=NULL);
 
     void scheduleNextWakeup();
-    void writeLog();
     void updateTSR(int nodeId, int value);
 
 

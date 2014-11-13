@@ -286,9 +286,6 @@ bool FTAMacLayer::addToQueue(cMessage * msg) {
     macpkt_ptr_t macPkt = new MacPkt(msg->getName());
     macPkt->setBitLength(headerLength);
     cObject *const cInfo = msg->removeControlInfo();
-    //EV<<"CSMA received a message from upper layer, name is "
-    //  << msg->getName() <<", CInfo removed, mac addr="
-    //  << cInfo->getNextHopMac()<<endl;
     macPkt->setDestAddr(getUpperDestinationFromControlInfo(cInfo));
     delete cInfo;
     macPkt->setSrcAddr(myMacAddr);
@@ -812,7 +809,6 @@ void FTAMacLayer::sendMacAck() {
     attachSignal(ack);
     sendDown(ack);
     nbTxAcks++;
-    //endSimulation();
 }
 
 
@@ -832,6 +828,7 @@ void FTAMacLayer::sendDataPacket() {
     pkt->setWbMiss(wbMiss);
     attachSignal(pkt);
     sendDown(pkt);
+    delete tmp;
 }
 
 void FTAMacLayer::attachSignal(macpkt_ptr_t macPkt) {

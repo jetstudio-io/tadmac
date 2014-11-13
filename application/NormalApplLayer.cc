@@ -95,7 +95,8 @@ void NormalApplLayer::initialize(int stage) {
 		// first packet generation time is always chosen uniformly
 		// to avoid systematic collisions
 		if(nbPackets> 0)
-			scheduleAt(simTime() +uniform(initializationTime, initializationTime + trafficParam), delayTimer);
+			//scheduleAt(simTime() +uniform(initializationTime, initializationTime + trafficParam), delayTimer);
+		    scheduleNextPacket();
 
 		if (stats) {
 			latenciesRaw.setName("rawLatencies");
@@ -125,8 +126,8 @@ void NormalApplLayer::initializeDistribution(const char* traffic) {
 	} else if (!strcmp(traffic, "normal")) {
 	    trafficType = NORMAL;
 	    // Convert to mili second
-	    double tmp_trafficParam = trafficParam * 1000;
-	    double tmp_trafficStability = trafficStability * 1000;
+	    double tmp_trafficParam = trafficParam * 100000;
+	    double tmp_trafficStability = trafficStability * 100000;
 	    gen = std::mt19937(rd());
 	    dist = std::normal_distribution<>(tmp_trafficParam, tmp_trafficStability);
 	} else if (!strcmp(traffic, "uniform")) {
@@ -147,7 +148,7 @@ void NormalApplLayer::scheduleNextPacket() {
 		switch (trafficType) {
 		    case NORMAL:
 		        waitTime = dist(gen);
-		        waitTime /= 1000;
+		        waitTime /= 100000;
 		        debugEV << "Nomal traffic, waitTime=" << waitTime << endl;
 		        break;
 		    case PERIODIC:
