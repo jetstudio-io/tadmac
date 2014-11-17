@@ -129,6 +129,7 @@ protected:
 
     double wakeupInterval;
     double waitCCA;
+    double maxCCA;
     double waitWB;
     double waitACK;
     double waitDATA;
@@ -254,7 +255,7 @@ protected:
     int sysClockFactor;
 
     /** @brief Ouput vector tracking the wakeup interval.*/
-    cOutVector iwuVec;
+    cOutVector *iwuVec;
     simtime_t lastWakeup;
 
     /**
@@ -266,13 +267,13 @@ protected:
     double *nodeWakeupIntervalLock;
     // used in new adaptive function
     double *nodeSumWUInt;
-    int *nodeFirstTime;
     simtime_t *nextWakeupTime;
+    double *lastDataReceived;
     double **nodeIdle;
     int *nodeIndex;
     int **TSR_bank;
     int *nodeNumberWakeup;
-    int *nodePriority;
+    int *nbRxData;
     LAddress::L2Type *routeTable;
     LAddress::L2Type receiverAddress;
 
@@ -282,7 +283,7 @@ protected:
 
     int nbCollision;
     int *nodeCollision;
-    int *nodeChoosen;
+    int *nodeChosen;
     int *nodeBroken;
 
     /** @brief Change MAC state */
@@ -304,15 +305,16 @@ protected:
     void attachSignal(macpkt_ptr_t macPkt);
 
     /** @brief Internal function to add a new packet from upper to the queue */
-    bool addToQueue(cMessage * msg);
+    bool addToQueue(cMessage *msg);
 
-    void removeFromQueue();
+    void handleDataPacket(cMessage *msg);
+    double getCCA();
 
     /** @brief Calculate the next wakeup interval*/
-    void calculateNextInterval(cMessage *msg=NULL);
+    void calculateNextInterval(int nodeId, macpktfta_ptr_t mac=NULL);
 
     void scheduleNextWakeup();
-    void writeLog();
+    void writeLog(int nodeId = 0);
     void updateTSR(int nodeId, int value);
 
 

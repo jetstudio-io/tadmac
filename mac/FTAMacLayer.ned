@@ -59,14 +59,17 @@ simple FTAMacLayer extends BaseMacLayer
         
         // time for CCA
         double waitCCA @unit(s) = default(0.005s); //CCA time 5ms
+        // time maximum for CCA
+        double maxCCA @unit(s) = default(0.01s); //maxCCA time 10ms
         // time to wait WB - used on sender only because receiver send WB
         double waitWB @unit(s) = default(0.25s);  //max time for wait WB is 250ms
         // time to wait ACK - used on sender
         double waitACK @unit(s) = default(0.01s); //time to wait ACK is 10ms
         // time to wait DATA - used on receiver
-        double waitDATA @unit(s) = default(0.01s); //time to wait DATA is 10ms
+        double waitDATA @unit(s) = default(0.02s); //time to wait DATA is 20ms
         // system clock - we calculate by 1ms
         double sysClock @unit(s) = default(0.001s);
+        
         // system clock factor
         int sysClockFactor = default(75);
         // weighting factor

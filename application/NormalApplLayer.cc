@@ -125,9 +125,9 @@ void NormalApplLayer::initializeDistribution(const char* traffic) {
 		trafficType = PERIODIC;
 	} else if (!strcmp(traffic, "normal")) {
 	    trafficType = NORMAL;
-	    // Convert to mili second
-	    double tmp_trafficParam = trafficParam * 100000;
-	    double tmp_trafficStability = trafficStability * 100000;
+	    // Convert to micro-second
+	    double tmp_trafficParam = trafficParam * 1000;
+	    double tmp_trafficStability = trafficStability * 1000;
 	    gen = std::mt19937(rd());
 	    dist = std::normal_distribution<>(tmp_trafficParam, tmp_trafficStability);
 	} else if (!strcmp(traffic, "uniform")) {
@@ -148,7 +148,7 @@ void NormalApplLayer::scheduleNextPacket() {
 		switch (trafficType) {
 		    case NORMAL:
 		        waitTime = dist(gen);
-		        waitTime /= 100000;
+		        waitTime /= 1000;
 		        debugEV << "Nomal traffic, waitTime=" << waitTime << endl;
 		        break;
 		    case PERIODIC:

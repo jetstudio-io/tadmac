@@ -47,4 +47,5 @@ packet MacPktFTA extends MacPkt
 //    long             sequenceId; // Sequence Number to detect duplicate messages
 	long           idle;  // The idle time that this node waited WB from receiver before send data
 	int            wbMiss;  // The number wake up without receipt WB
+	int            nodeId;  // The node id - easy to calculate the Iwu
 }

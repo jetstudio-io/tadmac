@@ -403,8 +403,7 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
                 // reset number resend data
                 txAttempts = 0;
                 numberWakeup++;
-                int tmp = round((simTime().dbl() - lastWakeup.dbl()) * 1000);
-                iwuVec.record(tmp);
+                iwuVec.record((simTime().dbl() - lastWakeup.dbl()) * 1000);
                 lastWakeup = simTime();
                 return;
             }
@@ -553,8 +552,7 @@ void TADMacLayer::handleSelfMsgReceiver(cMessage *msg) {
                 numberWakeup++;
 
                 nodeNumberWakeup[currentNode]++;
-                int tmp = round(nodeWakeupInterval[currentNode] * 1000);
-                iwuVec.record(tmp);
+                iwuVec.record(nodeWakeupInterval[currentNode] * 1000);
                 return;
             }
             break;
@@ -717,7 +715,7 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
             double WUInt_diff = (nodeIdle[currentNode][0] - nodeIdle[currentNode][1]) / 2;
             if (WUInt_diff * 100 != 0) {
                 nodeWakeupIntervalLock[currentNode] = nodeWakeupInterval[currentNode] + WUInt_diff;
-                nodeWakeupInterval[currentNode] = (nodeWakeupIntervalLock[currentNode] - idle + sysClock * 2);
+                nodeWakeupInterval[currentNode] = (nodeWakeupIntervalLock[currentNode] - idle + sysClock * 5);
                 if (nodeWakeupInterval[currentNode] < 0) {
                     nodeWakeupInterval[currentNode] += nodeWakeupIntervalLock[currentNode];
                     updateTSR(currentNode, 0);
