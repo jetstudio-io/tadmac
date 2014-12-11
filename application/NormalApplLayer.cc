@@ -42,6 +42,7 @@ Define_Module(NormalApplLayer);
 void NormalApplLayer::initialize(int stage) {
     BaseLayer::initialize(stage);
 	if (stage == 0) {
+	    srand(time(NULL));
 		BaseLayer::catPacketSignal.initialize();
 
 		debugEV<< "in initialize() stage 0...";
@@ -69,6 +70,8 @@ void NormalApplLayer::initialize(int stage) {
 		// get pointer to the world module
 		world = FindModule<BaseWorldUtility*>::findGlobalModule();
 
+		trafficParamOriginal = trafficParam;
+
 	} else if (stage == 1) {
 		debugEV << "in initialize() stage 1...";
 		// Application address configuration: equals to host address
@@ -95,9 +98,8 @@ void NormalApplLayer::initialize(int stage) {
 		// first packet generation time is always chosen uniformly
 		// to avoid systematic collisions
 		if(nbPackets> 0)
-			//scheduleAt(simTime() +uniform(initializationTime, initializationTime + trafficParam), delayTimer);
-		    scheduleNextPacket();
-
+//		    scheduleAt(simTime() + initializationTime, delayTimer);
+		    scheduleAt(simTime() +uniform(initializationTime, initializationTime + trafficParam), delayTimer);
 		if (stats) {
 			latenciesRaw.setName("rawLatencies");
 			latenciesRaw.setUnit("s");
@@ -134,7 +136,9 @@ void NormalApplLayer::initializeDistribution(const char* traffic) {
 		trafficType = UNIFORM;
 	} else if (!strcmp(traffic, "exponential")) {
 		trafficType = EXPONENTIAL;
-	} else {
+	} else if (!strcmp(traffic, "variable")) {
+        trafficType = VARIABLE;
+    } else {
 		trafficType = UNKNOWN;
 		EV << "Error! Unknown traffic type: " << traffic << endl;
 	}
@@ -151,6 +155,19 @@ void NormalApplLayer::scheduleNextPacket() {
 		        waitTime /= 1000;
 		        debugEV << "Nomal traffic, waitTime=" << waitTime << endl;
 		        break;
+		    case VARIABLE:
+		        if (simTime() < time1) {
+		            trafficParam = trafficParamOriginal * rate1;
+		        } else if (simTime() < time2) {
+		            trafficParam = trafficParamOriginal * rate2;
+		        }  else if (simTime() < time3) {
+                    trafficParam = trafficParamOriginal * rate3;
+                }  else {
+                    trafficParam = trafficParamOriginal * rate4;
+                }
+                waitTime = trafficParam;
+                debugEV<< "Periodic traffic, waitTime=" << waitTime << endl;
+                break;
 		    case PERIODIC:
                 waitTime = trafficParam;
                 debugEV<< "Periodic traffic, waitTime=" << waitTime << endl;

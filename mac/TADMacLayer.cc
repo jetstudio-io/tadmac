@@ -57,6 +57,7 @@ void TADMacLayer::initialize(int stage) {
         sysClock = hasPar("sysClock") ? par("sysClock") : 0.001;
         sysClockFactor = hasPar("sysClockFactor") ? par("sysClockFactor") : 75;
         alpha = hasPar("alpha") ? par("alpha") : 0.5;
+        TSR_length = hasPar("tsrLength") ? par("tsrLength") : 8;
         numberSender = hasPar("numberSender") ? par("numberSender") : 1;
 
         queueLength = hasPar("queueLength") ? par("queueLength") : 8;
@@ -118,7 +119,6 @@ void TADMacLayer::initialize(int stage) {
             ACKsent->setKind(ACK_SENT);
 
             int nodeIdx = getNode()->getIndex();
-            TSR_length = 4;
             // allocate memory & initialize for TSR bank
             TSR_bank = new int*[numberSender+2];
             for (int i = 1; i <= numberSender; i++) {
@@ -160,12 +160,20 @@ void TADMacLayer::initialize(int stage) {
             nodeIndex = new int[numberSender+2];
             nodeNumberWakeup = new int[numberSender+2];
             nodeFirstTime = new int[numberSender+2];
+            nbRxData = new int[numberSender+2];
+            iwuVec = new cOutVector[numberSender+1];
+
             for (int i = 1; i <= numberSender; i++) {
                 nodeIndex[i] = 0;
                 nodeNumberWakeup[i] = 0;
                 nodeFirstTime[i] = 1;
                 nodeIdle[i] = new double[2];
                 nodeIdle[i][0] = nodeIdle[i][1] = -1;
+                nbRxData[i] = 0;
+
+                ostringstream converter;
+                converter << "Iwu_" << (i + nodeIdx);
+                iwuVec[i].setName(converter.str().c_str());
             }
         } else {
             /**
@@ -192,11 +200,14 @@ void TADMacLayer::initialize(int stage) {
             waitACKTimeout = new cMessage("WAIT_ACK_TIMEOUT");
             waitACKTimeout->setKind(WAIT_ACK_TIMEOUT);
 
+            iwuVec = new cOutVector[2];
+            iwuVec[0].setName("Iwu");
+            iwuVec[1].setName("idle");
+
 //            ACKreceived = new cMessage("ACK_RECEIVED");
 //            ACKreceived->setKind(ACK_RECEIVED);
         }
         lastWakeup = 0;
-        iwuVec.setName("Iwu");
         numberWakeup = 0;
         scheduleAt(0.0, start);
     }
@@ -245,6 +256,11 @@ void TADMacLayer::finish() {
         recordScalar("nbTxAcks", nbTxAcks);
         recordScalar("numberWakeup", numberWakeup);
         if (role == NODE_RECEIVER) {
+            for (int i = 0; i <= numberSender; i++) {
+                ostringstream converter;
+                converter << "nbRxData_" << i;
+                recordScalar(converter.str().c_str(), nbRxData[i]);
+            }
         }
     }
 }
@@ -403,7 +419,7 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
                 // reset number resend data
                 txAttempts = 0;
                 numberWakeup++;
-                iwuVec.record((simTime().dbl() - lastWakeup.dbl()) * 1000);
+                iwuVec[0].record((simTime().dbl() - lastWakeup.dbl()) * 1000);
                 lastWakeup = simTime();
                 return;
             }
@@ -415,6 +431,7 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
                 // Turn back to SLEEP state
                 macState = SLEEP;
                 changeMACState();
+                iwuVec[1].record((simTime().dbl() - startWake.dbl()) * 1000);
                 return;
             }
             // duration the WAIT_WB, received the WB message -> change to CCA state & schedule the timeout event
@@ -439,6 +456,7 @@ void TADMacLayer::handleSelfMsgSender(cMessage *msg) {
                 scheduleAt(simTime() + waitCCA, ccaDATATimeout);
                 // log the time wait for WB
                 timeWaitWB = simTime() - startWake;
+                iwuVec[1].record((timeWaitWB.dbl()) * 1000);
                 // reset ccaAttempts
                 ccaAttempts = 0;
                 mac = NULL;
@@ -552,7 +570,7 @@ void TADMacLayer::handleSelfMsgReceiver(cMessage *msg) {
                 numberWakeup++;
 
                 nodeNumberWakeup[currentNode]++;
-                iwuVec.record(nodeWakeupInterval[currentNode] * 1000);
+                iwuVec[currentNode].record(nodeWakeupInterval[currentNode] * 1000);
                 return;
             }
             break;
@@ -659,6 +677,10 @@ void TADMacLayer::updateTSR(int nodeId, int value) {
  * Calculate next wakeup interval for current node
  */
 void TADMacLayer::calculateNextInterval(cMessage *msg) {
+
+    if (msg != NULL) {
+        nbRxData[currentNode]++;
+    }
     int n01, n11, nc01, nc11;
     n01 = n11 = nc01 = nc11 = 0;
     int n02, n12, nc02, nc12;
@@ -749,6 +771,11 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
             nodeFirstTime[currentNode] = 1;
         }
     }
+//    nodeWakeupInterval[currentNode] += mu * sysClockFactor * sysClock;
+//    nodeWakeupInterval[currentNode] = round(nodeWakeupInterval[currentNode] * 1000.0) / 1000.0;
+//    if (nodeWakeupInterval[currentNode] < 0.02) {
+//        nodeWakeupInterval[currentNode] = 0.02;
+//    }
     nextWakeupTime[currentNode] += nodeWakeupInterval[currentNode];
 }
 

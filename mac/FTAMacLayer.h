@@ -61,7 +61,7 @@ public:
                 lastDataPktSrcAddr(), lastDataPktDestAddr(),
                 txAttempts(0), droppedPacket(), nicId(-1), queueLength(0), animation(false),
                 bitrate(0), txPower(0),
-                useMacAcks(0), maxTxAttempts(0), stats(false), first_time(1), wakeupIntervalLook(0),
+                useMacAcks(0), maxTxAttempts(0), stats(false), wakeupIntervalLook(0),
                 numberWakeup(0), sysClockFactor(75), numberSender(1)
     {}
 
@@ -135,6 +135,7 @@ protected:
     double waitDATA;
     double sysClock;
     double alpha;
+    double sigma;
 
     /** @brief MAC states */
     enum States {
@@ -244,8 +245,6 @@ protected:
      * These variables used for calculate the error correlator.
      */
     int index;
-    int first_time;
-    double idle_array[2];
     double wakeupIntervalLook;
 
     bool useCorrection;

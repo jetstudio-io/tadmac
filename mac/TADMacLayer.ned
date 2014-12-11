@@ -71,6 +71,8 @@ simple TADMacLayer extends BaseMacLayer
 		int sysClockFactor = default(75);
 		// weighting factor
 		double alpha = default(0.5);
+		// TSR length
+		int tsrLength = default(8);
 		// wake up interval for each node - used in receiver only because in sender, node wake up when it has data to send
 		double WUIInit @unit(s) = default(0.1s);  // value initialization for wakeup interval: 100ms
 		
