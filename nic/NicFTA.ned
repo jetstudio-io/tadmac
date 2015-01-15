@@ -13,12 +13,12 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-package tadmac.modules.nic;
+package ftamac.modules.nic;
 
 import org.mixim.modules.nic.WirelessNicBattery;
 
 module NicFTA extends WirelessNicBattery
 {
     parameters:
-        macType = default("tadmac.modules.mac.FTAMacLayer");
+        macType = default("ftamac.modules.mac.FTAMacLayer");
 }

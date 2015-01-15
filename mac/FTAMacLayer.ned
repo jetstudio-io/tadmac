@@ -13,7 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-package tadmac.modules.mac;
+package ftamac.modules.mac;
 
 //***************************************************************************
 //* file:        FTAMacLayer.ned

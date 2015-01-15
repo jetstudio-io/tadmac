@@ -13,7 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-package tadmac.modules.node;
+package ftamac.modules.node;
 
 import org.mixim.modules.node.WirelessNodeBattery;
 

@@ -97,9 +97,13 @@ void NormalApplLayer::initialize(int stage) {
 
 		// first packet generation time is always chosen uniformly
 		// to avoid systematic collisions
-		if(nbPackets> 0)
-//		    scheduleAt(simTime() + initializationTime, delayTimer);
-		    scheduleAt(simTime() +uniform(initializationTime, initializationTime + trafficParam), delayTimer);
+		if(nbPackets> 0) {
+		    if (initializationTime > 0) {
+		        scheduleAt(simTime() + initializationTime, delayTimer);
+		    } else {
+		        scheduleAt(simTime() + uniform(0, trafficParam), delayTimer);
+		    }
+		}
 		if (stats) {
 			latenciesRaw.setName("rawLatencies");
 			latenciesRaw.setUnit("s");

@@ -1,4 +1,4 @@
-package tadmac.modules.application;
+package ftamac.modules.application;
 
 import org.mixim.base.modules.IBaseApplLayer;
 
