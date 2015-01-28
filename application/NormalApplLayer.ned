@@ -40,12 +40,14 @@ simple NormalApplLayer like IBaseApplLayer {
         bool broadcastPackets = default(false); // send packets in broadcast mode
         double nbPackets = default(0);
         int destAddr = default(0);
-        string trafficType = default("normal");  	          // Can be one of: normal, periodic or exponential
+        string trafficType = default("normal");  	          // Can be one of: normal, periodic or exponential, variable
         double trafficParam @unit(s) = default(1 s);			// the mean time between two packets
         double trafficStability @unit(s) = default(0.1 s);
         double initializationTime @unit(s) = default(1 s); // minimum time before generation of the first packet
 		int headerLength @unit(byte) = default(2 byte);
         bool notAffectedByHostState = default(true);
+        int nbChange = default(0);
+        double runTime @unit(s) = default(1000s);
     gates:
         input lowerLayerIn; // from network layer
         input lowerControlIn;

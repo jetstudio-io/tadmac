@@ -101,6 +101,7 @@ class MIXIM_API NormalApplLayer : public BaseLayer
         int trafficType;
         double trafficParam;
         double trafficStability;
+        double *Txint;
         int nbPackets;
         long nbPacketsSent;
         long nbPacketsReceived;
@@ -115,10 +116,11 @@ class MIXIM_API NormalApplLayer : public BaseLayer
         int headerLength;
         BaseWorldUtility* world;
 
-        double trafficParamOriginal;
-        std::random_device rd;
-        std::mt19937 gen;
-        std::normal_distribution<> dist;
+        int currentWakeupIdx;
+
+//        double trafficParamOriginal;
+//        std::default_random_engine gen;
+//        std::poisson_distribution<int> dist;
 
         static const int time1 = 200;
         static const int time2 = 400;

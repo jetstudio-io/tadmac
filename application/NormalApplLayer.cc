@@ -20,6 +20,9 @@
 #include "NormalApplLayer.h"
 
 #include <sstream>
+#include <fstream>
+#include <unistd.h>
+#include <ctime>
 
 #include "BaseNetwLayer.h"
 #include "AddressingInterface.h"
@@ -42,7 +45,8 @@ Define_Module(NormalApplLayer);
 void NormalApplLayer::initialize(int stage) {
     BaseLayer::initialize(stage);
 	if (stage == 0) {
-	    srand(time(NULL));
+//	    usleep(5);
+//	    std::srand(std::time(0));
 		BaseLayer::catPacketSignal.initialize();
 
 		debugEV<< "in initialize() stage 0...";
@@ -58,10 +62,52 @@ void NormalApplLayer::initialize(int stage) {
 		// application configuration
 		const char *traffic = par("trafficType");
 		destAddr = LAddress::L3Type(par("destAddr").longValue());
+		int nbChange = par("nbChange");
+		double runTimeTotal = par("runTime");
+		int nbPacketTotal = int(runTimeTotal / trafficParam);
+		double runTimeSeg = runTimeTotal / (nbChange + 1);
+		Txint = new double[3000];
+
+		//Calculate the TxInt for all packets follow the poisson distribution
+		double mean = nbPacketTotal / (nbChange + 1);
+		std::cout << "nbChange " << nbChange << std::endl;
+		std::cout << "runTimeTotal " << runTimeTotal << std::endl;
+		std::cout << "nbPacketTotal " << nbPacketTotal << std::endl;
+		std::cout << "mean " << mean << std::endl;
+		std::default_random_engine generator(std::time(0));
+        std::poisson_distribution<int> distribution(mean);
+//        int init_rand = std::rand() % 200;
+//        std::cout << "init_rand " << init_rand << endl;
+//        for (int i = 0; i < init_rand; i++) {
+//            distribution(generator);
+//        }
+        int idx = 0;
+		for (int i = 0; i <= nbChange; i++) {
+		    int nbPacket = distribution(generator);
+		    std::cout << nbPacket << " - " << round(runTimeSeg / nbPacket * 1000) / 1000 << " | ";
+		    for (int j = 0; j < nbPacket; j++) {
+		        Txint[idx] = round(runTimeSeg / nbPacket * 1000) / 1000;
+		        idx++;
+		    }
+		}
+		Txint[idx] = 10;
+		std::cout << std::endl;
+
+//		std::ifstream csvfile(inputTraffic);
+//		std::string tmp;
+//		int totalPkg = 0;
+//		int nbChange = 0;
+//		while (file.good()) {
+//		    std::getline(csvfile, tmp, ',');
+//		    nbChange++;
+//
+//		}
+
 		nbPacketsSent = 0;
 		nbPacketsReceived = 0;
 		firstPacketGeneration = -1;
 		lastPacketReception = -2;
+		currentWakeupIdx = 0;
 
 		initializeDistribution(traffic);
 
@@ -69,9 +115,6 @@ void NormalApplLayer::initialize(int stage) {
 
 		// get pointer to the world module
 		world = FindModule<BaseWorldUtility*>::findGlobalModule();
-
-		trafficParamOriginal = trafficParam;
-
 	} else if (stage == 1) {
 		debugEV << "in initialize() stage 1...";
 		// Application address configuration: equals to host address
@@ -132,10 +175,10 @@ void NormalApplLayer::initializeDistribution(const char* traffic) {
 	} else if (!strcmp(traffic, "normal")) {
 	    trafficType = NORMAL;
 	    // Convert to micro-second
-	    double tmp_trafficParam = trafficParam * 1000;
-	    double tmp_trafficStability = trafficStability * 1000;
-	    gen = std::mt19937(rd());
-	    dist = std::normal_distribution<>(tmp_trafficParam, tmp_trafficStability);
+//	    double tmp_trafficParam = trafficParam * 1000;
+//	    double tmp_trafficStability = trafficStability * 1000;
+//	    gen = std::mt19937(rd());
+//	    dist = std::normal_distribution<>(tmp_trafficParam, tmp_trafficStability);
 	} else if (!strcmp(traffic, "uniform")) {
 		trafficType = UNIFORM;
 	} else if (!strcmp(traffic, "exponential")) {
@@ -155,21 +198,13 @@ void NormalApplLayer::scheduleNextPacket() {
 
 		switch (trafficType) {
 		    case NORMAL:
-		        waitTime = dist(gen);
+//		        waitTime = dist(gen);
 		        waitTime /= 1000;
 		        debugEV << "Nomal traffic, waitTime=" << waitTime << endl;
 		        break;
 		    case VARIABLE:
-		        if (simTime() < time1) {
-		            trafficParam = trafficParamOriginal * rate1;
-		        } else if (simTime() < time2) {
-		            trafficParam = trafficParamOriginal * rate2;
-		        }  else if (simTime() < time3) {
-                    trafficParam = trafficParamOriginal * rate3;
-                }  else {
-                    trafficParam = trafficParamOriginal * rate4;
-                }
-                waitTime = trafficParam;
+		        waitTime = Txint[currentWakeupIdx];
+		        currentWakeupIdx++;
                 debugEV<< "Periodic traffic, waitTime=" << waitTime << endl;
                 break;
 		    case PERIODIC:

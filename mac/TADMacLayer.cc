@@ -255,6 +255,7 @@ void TADMacLayer::finish() {
         recordScalar("nbRecvdAcks", nbRecvdAcks);
         recordScalar("nbTxAcks", nbTxAcks);
         recordScalar("numberWakeup", numberWakeup);
+        recordScalar("error_radio", (numberWakeup - nbRxWB) / double(numberWakeup * 1.0) * 100.0);
         if (role == NODE_RECEIVER) {
             for (int i = 0; i <= numberSender; i++) {
                 ostringstream converter;
@@ -850,7 +851,11 @@ void TADMacLayer::sendWB() {
     wb->setSrcAddr(myMacAddr);
     //wb->setDestAddr(LAddress::L2BROADCAST);
     wb->setDestAddr(routeTable[currentNode]);
-    wb->setName("WB");
+
+    ostringstream converter;
+    converter << "WB_" << currentNode;
+
+    wb->setName(converter.str().c_str());
     wb->setKind(WB);
     wb->setBitLength(headerLength);
 

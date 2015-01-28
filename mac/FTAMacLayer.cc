@@ -167,7 +167,7 @@ void FTAMacLayer::initialize(int stage) {
             iwuVec = new cOutVector[numberSender+1];
             for (int i = 1; i <= numberSender; i++) {
                 ostringstream converter;
-                converter << "Iwu" << i;
+                converter << "Iwu_" << (i + nodeIdx);
                 iwuVec[i].setName(converter.str().c_str());
             }
         } else {
@@ -253,6 +253,7 @@ void FTAMacLayer::finish() {
         recordScalar("nbTxAcks", nbTxAcks);
         recordScalar("numberWakeup", numberWakeup);
         recordScalar("nbCollision", nbCollision);
+        recordScalar("error_radio", (numberWakeup - nbRxWB) / double(numberWakeup * 1.0) * 100.0);
         if (role == NODE_RECEIVER) {
             for (int i = 0; i <= numberSender; i++) {
                 ostringstream converter;
