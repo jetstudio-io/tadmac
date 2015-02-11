@@ -45,8 +45,8 @@ Define_Module(NormalApplLayer);
 void NormalApplLayer::initialize(int stage) {
     BaseLayer::initialize(stage);
 	if (stage == 0) {
-//	    usleep(5);
-//	    std::srand(std::time(0));
+//	    usleep(1);
+//	    srand(time(0));
 		BaseLayer::catPacketSignal.initialize();
 
 		debugEV<< "in initialize() stage 0...";
@@ -74,13 +74,14 @@ void NormalApplLayer::initialize(int stage) {
 		std::cout << "runTimeTotal " << runTimeTotal << std::endl;
 		std::cout << "nbPacketTotal " << nbPacketTotal << std::endl;
 		std::cout << "mean " << mean << std::endl;
-		std::default_random_engine generator(std::time(0));
+		std::default_random_engine generator(std::time(0) + getNode()->getIndex());
         std::poisson_distribution<int> distribution(mean);
 //        int init_rand = std::rand() % 200;
 //        std::cout << "init_rand " << init_rand << endl;
 //        for (int i = 0; i < init_rand; i++) {
 //            distribution(generator);
 //        }
+        std::cout << getNode()->getIndex() << " | ";
         int idx = 0;
 		for (int i = 0; i <= nbChange; i++) {
 		    int nbPacket = distribution(generator);
@@ -144,7 +145,7 @@ void NormalApplLayer::initialize(int stage) {
 		    if (initializationTime > 0) {
 		        scheduleAt(simTime() + initializationTime, delayTimer);
 		    } else {
-		        scheduleAt(simTime() + uniform(0, trafficParam), delayTimer);
+		        scheduleAt(simTime() + uniform(0, trafficParam * 2), delayTimer);
 		    }
 		}
 		if (stats) {

@@ -1,3 +1,4 @@
 #!/bin/bash
 ./ftamac -n .:../MiXiM/src/base:../MiXiM/src/inet_stub:../MiXiM/src/modules  -u Cmdenv omnetpp.ini -c FTA
 ./ftamac -n .:../MiXiM/src/base:../MiXiM/src/inet_stub:../MiXiM/src/modules  -u Cmdenv omnetpp.ini -c TAD
+./ftamac -n .:../MiXiM/src/base:../MiXiM/src/inet_stub:../MiXiM/src/modules  -u Cmdenv omnetpp.ini -c star
