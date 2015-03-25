@@ -117,6 +117,7 @@ class MIXIM_API NormalApplLayer : public BaseLayer
         BaseWorldUtility* world;
 
         int currentWakeupIdx;
+        cOutVector iwuVec;
 
 //        double trafficParamOriginal;
 //        std::default_random_engine gen;

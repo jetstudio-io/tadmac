@@ -46,7 +46,7 @@ void NormalApplLayer::initialize(int stage) {
     BaseLayer::initialize(stage);
 	if (stage == 0) {
 //	    usleep(1);
-//	    srand(time(0));
+	    srand(time(0) + getNode()->getIndex());
 		BaseLayer::catPacketSignal.initialize();
 
 		debugEV<< "in initialize() stage 0...";
@@ -66,43 +66,38 @@ void NormalApplLayer::initialize(int stage) {
 		double runTimeTotal = par("runTime");
 		int nbPacketTotal = int(runTimeTotal / trafficParam);
 		double runTimeSeg = runTimeTotal / (nbChange + 1);
-		Txint = new double[3000];
+		Txint = new double[10000];
 
 		//Calculate the TxInt for all packets follow the poisson distribution
 		double mean = nbPacketTotal / (nbChange + 1);
 		std::cout << "nbChange " << nbChange << std::endl;
 		std::cout << "runTimeTotal " << runTimeTotal << std::endl;
-		std::cout << "nbPacketTotal " << nbPacketTotal << std::endl;
-		std::cout << "mean " << mean << std::endl;
-		std::default_random_engine generator(std::time(0) + getNode()->getIndex());
-        std::poisson_distribution<int> distribution(mean);
-//        int init_rand = std::rand() % 200;
-//        std::cout << "init_rand " << init_rand << endl;
-//        for (int i = 0; i < init_rand; i++) {
-//            distribution(generator);
-//        }
+//		std::cout << "nbPacketTotal " << nbPacketTotal << std::endl;
+//		std::cout << "mean " << mean << std::endl;
+		std::default_random_engine generator(time(0) + getNode()->getIndex());
+		std::uniform_real_distribution<double> distribution(0.3, trafficParam * 2);
+//        std::poisson_distribution<int> distribution(mean);
         std::cout << getNode()->getIndex() << " | ";
         int idx = 0;
+        double simTime = 0;
 		for (int i = 0; i <= nbChange; i++) {
-		    int nbPacket = distribution(generator);
-		    std::cout << nbPacket << " - " << round(runTimeSeg / nbPacket * 1000) / 1000 << " | ";
-		    for (int j = 0; j < nbPacket; j++) {
-		        Txint[idx] = round(runTimeSeg / nbPacket * 1000) / 1000;
+		    double newIwu = round(distribution(generator) * 100) / 100;
+		    std::cout << newIwu << " - ";
+		    while (simTime < runTimeSeg * (i+1)) {
+		        Txint[idx] = newIwu;
+		        simTime += newIwu;
 		        idx++;
 		    }
+//		    int nbPacket = distribution(generator);
+//		    std::cout << nbPacket << " - " << round(runTimeSeg / nbPacket * 100) / 100 << " | ";
+//		    for (int j = 0; j < nbPacket; j++) {
+//		        Txint[idx] = round(runTimeSeg / nbPacket * 100) / 100;
+//		        idx++;
+//		    }
+
 		}
 		Txint[idx] = 10;
 		std::cout << std::endl;
-
-//		std::ifstream csvfile(inputTraffic);
-//		std::string tmp;
-//		int totalPkg = 0;
-//		int nbChange = 0;
-//		while (file.good()) {
-//		    std::getline(csvfile, tmp, ',');
-//		    nbChange++;
-//
-//		}
 
 		nbPacketsSent = 0;
 		nbPacketsReceived = 0;
@@ -153,6 +148,8 @@ void NormalApplLayer::initialize(int stage) {
 			latenciesRaw.setUnit("s");
 			latency.setName("latency");
 		}
+		iwuVec.setName("Iwu");
+		iwuVec.setUnit("ms");
 	}
 }
 
@@ -228,9 +225,9 @@ void NormalApplLayer::scheduleNextPacket() {
 			return; // don not schedule
 			break;
 		}
-		debugEV << "Start timer for a new packet in " << waitTime << " seconds." <<
-		endl;
+		debugEV << "Start timer for a new packet in " << waitTime << " seconds." << endl;
 		scheduleAt(simTime() + waitTime, delayTimer);
+		iwuVec.record(waitTime * 1000);
 		debugEV << "...timer rescheduled." << endl;
 	} else {
 		debugEV << "All packets sent.\n";

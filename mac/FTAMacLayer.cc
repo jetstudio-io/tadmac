@@ -235,7 +235,6 @@ FTAMacLayer::~FTAMacLayer() {
     for (it = macQueue.begin(); it != macQueue.end(); ++it) {
         delete (*it);
     }
-
     macQueue.clear();
 }
 
@@ -320,6 +319,18 @@ void FTAMacLayer::handleUpperMsg(cMessage *msg) {
         }
         scheduleAt(simTime(), wakeupDATA);
     }
+
+    // If this node is waiting for WB but is too long (need to send next data packet)
+    if (macState == WAIT_WB) {
+        if (rxWBTimeout->isScheduled()) {
+            cancelEvent(rxWBTimeout);
+        }
+        macState = SLEEP;
+        changeMACState();
+        wbMiss++;
+        iwuVec[1].record((simTime().dbl() - startWake.dbl()) * 1000);
+        scheduleAt(simTime(), wakeupDATA);
+    }
 }
 
 void FTAMacLayer::writeLog(int nodeId) {
@@ -330,7 +341,7 @@ void FTAMacLayer::writeLog(int nodeId) {
         for (int i = 0; i <= numberSender; i++) {
             if (nodeChosen[i] >= 1) {
                 nodeNumberWakeup[i]++;
-                iwuVec[i].record(nodeWakeupInterval[i] * 1000);
+                iwuVec[i].recordWithTimestamp(nextWakeupTime[i],nodeWakeupInterval[i] * 1000);
             }
         }
     }
@@ -700,8 +711,11 @@ void FTAMacLayer::scheduleNextWakeup() {
         // if already pass the wakeup moment for this node
         // -> calculate nextwakeup for this node with 0 in TSR
         if (nextWakeupTime[i] < simTime()) {
-            calculateNextInterval(i);
-            writeLog(i);
+            while (nextWakeupTime[i] < simTime()) {
+                writeLog(i);
+                calculateNextInterval(i);
+            }
+//            cout << endl;
         }
         if (nextWakeupTime[i] < min) {
             min = nextWakeupTime[i];
@@ -735,7 +749,7 @@ void FTAMacLayer::updateTSR(int nodeId, int value) {
 void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
     int n0 = 0;
     // Move the array TSR to left to store the new value in TSR[TSR_lenth - 1]
-//    updateTSR(nodeId, (mac == NULL) ? 0 : 1);
+    updateTSR(nodeId, (mac == NULL) ? 0 : 1);
 //    // Calculate n0;
     for (int i = 0; i < TSR_length; i++) {
         if (TSR_bank[nodeId][i] == 0) {
@@ -747,7 +761,6 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
      */
 //    nodeSumWUInt[nodeId] += nodeWakeupInterval[nodeId];
     if (mac != NULL) {
-        double tmp = simTime().dbl();
         nodeSumWUInt[nodeId] = simTime().dbl() - lastDataReceived[nodeId];
         lastDataReceived[nodeId] = simTime().dbl();
         double idle = double(mac->getIdle()) / 1000.0;
@@ -764,12 +777,18 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
                 nodeWakeupIntervalLock[nodeId] = (nodeSumWUInt[nodeId] + nodeIdle[nodeId][0] - nodeIdle[nodeId][1]) / (wbMiss + 1);
     //            nodeWakeupInterval[nodeId] = round(nodeWakeupIntervalLock[nodeId] * 1000) / 1000.0;
                 // Next WUInt
-                nodeWakeupInterval[nodeId] = round((nodeWakeupIntervalLock[nodeId] - idle + sysClock + ((nodeIdle[nodeId][1] - nodeIdle[nodeId][0]) / waitWB * maxCCA)) * 1000) / 1000.0;
+                nodeWakeupInterval[nodeId] = round((nodeWakeupIntervalLock[nodeId] - idle + sysClock * 5) * 1000) / 1000.0;
+                if (nodeWakeupInterval[nodeId] < 0) {
+                    updateTSR(nodeId, 0);
+                    writeLog(nodeId);
+                    nodeWakeupInterval[nodeId] += nodeWakeupIntervalLock[nodeId];
+                    cout << "=== fucking shit ==== " << nodeWakeupIntervalLock[nodeId] << " - " << nodeSumWUInt[nodeId] << " - " << nodeIdle[nodeId][0] << " - " << idle << " - " << wbMiss << endl;
+                }
     //            if (nodeWakeupInterval[nodeId] < 0.02) {
     //                nodeWakeupInterval[nodeId] = 0.02;
     //            }
             } else {
-                nodeWakeupInterval[nodeId] += sysClock * sysClockFactor;
+                nodeWakeupInterval[nodeId] += sysClock * sysClockFactor * n0;
                 nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
             }
 //        }
