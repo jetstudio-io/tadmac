@@ -268,7 +268,7 @@ protected:
     // used in new adaptive function
     double *nodeSumWUInt;
     int *nodeFirstTime;
-    simtime_t *nextWakeupTime;
+    double *nextWakeupTime;
     double **nodeIdle;
     int *nodeIndex;
     int **TSR_bank;

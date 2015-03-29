@@ -266,8 +266,9 @@ protected:
     double *nodeWakeupIntervalLock;
     // used in new adaptive function
     double *nodeSumWUInt;
-    simtime_t *nextWakeupTime;
-    double *lastDataReceived;
+    double *nextWakeupTime;
+    double *sentWB;
+    double globalSentWB;
     double **nodeIdle;
     int *nodeIndex;
     int **TSR_bank;

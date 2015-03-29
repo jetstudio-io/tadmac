@@ -133,14 +133,14 @@ void FTAMacLayer::initialize(int stage) {
             nodeWakeupInterval = new double[numberSender+1];
             nodeWakeupIntervalLock = new double[numberSender+1];
             nodeSumWUInt = new double[numberSender+1];
-            nextWakeupTime = new simtime_t[numberSender+1];
-            lastDataReceived = new double[numberSender+1];
+            nextWakeupTime = new double[numberSender+1];
+            sentWB = new double[numberSender+1];
             for (int i = 1; i <= numberSender; i++) {
                 nodeWakeupInterval[i] = wakeupInterval;
                 nodeWakeupIntervalLock[i] = 0.0;
                 nextWakeupTime[i] = 0.0;
                 nodeSumWUInt[i] = 0.0;
-                lastDataReceived[i] = 0.0;
+                sentWB[i] = 0.0;
 //                nextWakeupTime[i] = (rand() % 1000 + 1) / 1000.0;
 //                nextWakeupTime[i] = (100 * i) / 1000.0;
                 //cout << nextWakeupTime[i] << endl;
@@ -581,6 +581,8 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
                 changeMACState();
                 // Schedule wait data timeout event
                 scheduleAt(simTime() + waitDATA, rxDATATimeout);
+                // Store the time sent WB - used to calculate the Iwu
+                globalSentWB = round(simTime().dbl() * 1000) / 1000;
                 return;
             }
             break;
@@ -684,7 +686,7 @@ void FTAMacLayer::handleDataPacket (cMessage *msg) {
     // Calculate next wakeup interval
     calculateNextInterval(nodeId, mac);
     nbRxData[nodeId]++;
-    // Mark that this node already calculated
+    // Mark that this node already calculated & recevie DATA
     nodeChosen[nodeId] = 0;
     macQueue.push_back(mac->dup());
     // send mac packet to upper layer
@@ -710,22 +712,22 @@ void FTAMacLayer::scheduleNextWakeup() {
     for (int i = 1; i <= numberSender; i++) {
         // if already pass the wakeup moment for this node
         // -> calculate nextwakeup for this node with 0 in TSR
-        if (nextWakeupTime[i] < simTime()) {
-            while (nextWakeupTime[i] < simTime()) {
+        if (nextWakeupTime[i] < simTime().dbl() - waitWB) {
+            while (nextWakeupTime[i] < simTime().dbl()) {
                 writeLog(i);
                 calculateNextInterval(i);
             }
 //            cout << endl;
         }
-        if (nextWakeupTime[i] < min) {
+        if (nextWakeupTime[i] < min.dbl()) {
             min = nextWakeupTime[i];
         }
     }
 
     // find the nodes need to wakeup to receive data
     for (int i = 1; i <= numberSender; i++) {
-        if (nextWakeupTime[i] < min + (waitCCA + waitDATA + maxCCA)) {
-            if (nextWakeupTime[i] > nextWakeup) {
+        if (nextWakeupTime[i] < min.dbl() + (waitCCA + waitDATA + maxCCA)) {
+            if (nextWakeupTime[i] > nextWakeup.dbl()) {
                 nextWakeup = nextWakeupTime[i];
             }
             // mark that this node is chosen
@@ -761,41 +763,32 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
      */
 //    nodeSumWUInt[nodeId] += nodeWakeupInterval[nodeId];
     if (mac != NULL) {
-        nodeSumWUInt[nodeId] = simTime().dbl() - lastDataReceived[nodeId];
-        lastDataReceived[nodeId] = simTime().dbl();
+        double IwuTotal = globalSentWB - sentWB[nodeId];
+
         double idle = double(mac->getIdle()) / 1000.0;
         int wbMiss = mac->getWbMiss();
         mac = NULL;
         nodeIdle[nodeId][1] = idle;
+        double nextWakeupTimeTmp = 0;
         // If this is not first packet received
-//        if (nodeWakeupIntervalLock[nodeId] > 0) {
-//            nodeWakeupInterval[nodeId] = nodeWakeupIntervalLock[nodeId];
-//            nodeWakeupIntervalLock[nodeId] = -1;
-//        } else {
-            if (nodeIdle[nodeId][0] >= 0 && nodeIdle[nodeId][1] >= 0) {
-                        // Calculate the TxInt of current node
-                nodeWakeupIntervalLock[nodeId] = (nodeSumWUInt[nodeId] + nodeIdle[nodeId][0] - nodeIdle[nodeId][1]) / (wbMiss + 1);
-    //            nodeWakeupInterval[nodeId] = round(nodeWakeupIntervalLock[nodeId] * 1000) / 1000.0;
-                // Next WUInt
-                nodeWakeupInterval[nodeId] = round((nodeWakeupIntervalLock[nodeId] - idle + sysClock * 5) * 1000) / 1000.0;
-                if (nodeWakeupInterval[nodeId] < 0) {
-                    updateTSR(nodeId, 0);
-                    writeLog(nodeId);
-                    nodeWakeupInterval[nodeId] += nodeWakeupIntervalLock[nodeId];
-                    cout << "=== fucking shit ==== " << nodeWakeupIntervalLock[nodeId] << " - " << nodeSumWUInt[nodeId] << " - " << nodeIdle[nodeId][0] << " - " << idle << " - " << wbMiss << endl;
-                }
-    //            if (nodeWakeupInterval[nodeId] < 0.02) {
-    //                nodeWakeupInterval[nodeId] = 0.02;
-    //            }
-            } else {
-                nodeWakeupInterval[nodeId] += sysClock * sysClockFactor * n0;
-                nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
-            }
-//        }
+        if (nodeIdle[nodeId][0] >= 0 && nodeIdle[nodeId][1] >= 0) {
+            // Calculate the TxInt of current node
+            nodeWakeupIntervalLock[nodeId] = (IwuTotal + nodeIdle[nodeId][0] - nodeIdle[nodeId][1]) / (wbMiss + 1);
+            // Next WUInt
+            nextWakeupTimeTmp = globalSentWB + (nodeWakeupIntervalLock[nodeId] - idle) - (waitCCA - 0.001);
+            // @TODO bug error if nextWakeupTimeTmp < simTime()
+
+            nodeWakeupInterval[nodeId] = nextWakeupTimeTmp - nextWakeupTime[nodeId];
+            nextWakeupTime[nodeId] = nextWakeupTimeTmp;
+        } else {
+            nodeWakeupInterval[nodeId] += sysClock * sysClockFactor;
+            nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
+            nextWakeupTime[nodeId] += nodeWakeupInterval[nodeId];
+        }
         // re-calculate the total WUInt between 2 times receipt data packet
-        nodeSumWUInt[nodeId] = 0;
         nodeIdle[nodeId][0] = idle;
         nodeIdle[nodeId][1] = -1;
+        sentWB[nodeId] = globalSentWB;
     } else {
         // If we already calculated the WUInt convergent -> use this, don't need to calculate
         if (nodeWakeupIntervalLock[nodeId] > 0) {
@@ -803,11 +796,11 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
             nodeWakeupIntervalLock[nodeId] = -1;
         } else {
             // Did not receive the data
-            nodeWakeupInterval[nodeId] += sysClock * sysClockFactor * n0;
+            nodeWakeupInterval[nodeId] += sysClock * sysClockFactor;
             nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
         }
+        nextWakeupTime[nodeId] += nodeWakeupInterval[nodeId];
     }
-    nextWakeupTime[nodeId] += nodeWakeupInterval[nodeId];
 }
 
 /**

@@ -145,7 +145,7 @@ void TADMacLayer::initialize(int stage) {
             nodeWakeupInterval = new double[numberSender+1];
             nodeWakeupIntervalLock = new double[numberSender+1];
             nodeSumWUInt = new double[numberSender+1];
-            nextWakeupTime = new simtime_t[numberSender+1];
+            nextWakeupTime = new double[numberSender+1];
             for (int i = 1; i <= numberSender; i++) {
                 nodeWakeupInterval[i] = wakeupInterval;
                 nodeWakeupIntervalLock[i] = 0.0;
@@ -353,14 +353,14 @@ void TADMacLayer::scheduleNextWakeup() {
 //    macState = SLEEP;
     simtime_t nextWakeup = 10000;
     for (int i = 1; i <= numberSender; i++) {
-        // if already pass the wakeup moment for this node
-        // -> calculate nextwakeup for this node with 0 in TSR
-        if (nextWakeupTime[i] < simTime()) {
+        // if already pass the wakeup moment for this node -> force wakeup to send WB to this node
+        if (nextWakeupTime[i] < simTime().dbl()) {
             currentNode = i;
-            calculateNextInterval();
-            nextWakeupTime[i] += ceil((simTime() - nextWakeupTime[i]) / nodeWakeupInterval[i]) * nodeWakeupInterval[i];
+            macState = SLEEP;
+            scheduleAt(simTime(), wakeup);
+            return;
         }
-        if (nextWakeupTime[i] < nextWakeup) {
+        if (nextWakeupTime[i] < nextWakeup.dbl()) {
             nextWakeup = nextWakeupTime[i];
             currentNode = i;
         }
@@ -750,8 +750,10 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
                 nodeWakeupIntervalLock[currentNode] = nodeWakeupInterval[currentNode] + WUInt_diff;
                 nodeWakeupInterval[currentNode] = (nodeWakeupIntervalLock[currentNode] - idle + sysClock);
                 if (nodeWakeupInterval[currentNode] < 0) {
-                    nodeWakeupInterval[currentNode] += nodeWakeupIntervalLock[currentNode];
-                    updateTSR(currentNode, 0);
+                    while (nodeWakeupInterval[currentNode] < 0) {
+                        nodeWakeupInterval[currentNode] += nodeWakeupIntervalLock[currentNode];
+                        updateTSR(currentNode, 0);
+                    }
                 }
                 nodeFirstTime[currentNode]++;
             }
@@ -788,6 +790,7 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
 //        nodeWakeupInterval[currentNode] = 0.02;
 //    }
     nextWakeupTime[currentNode] += nodeWakeupInterval[currentNode];
+//    nextWakeupTime[currentNode] = simTime() + nodeWakeupInterval[currentNode];
 }
 
 /**
