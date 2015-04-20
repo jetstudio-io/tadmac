@@ -266,7 +266,7 @@ protected:
     double *nodeWakeupInterval;
     double *nodeWakeupIntervalLock;
     // used in new adaptive function
-    double *nodeSumWUInt;
+    double *nodeTwb;
     int *nodeFirstTime;
     double *nextWakeupTime;
     double **nodeIdle;

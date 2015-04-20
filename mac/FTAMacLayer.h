@@ -244,7 +244,7 @@ protected:
     /**
      * These variables used for calculate the error correlator.
      */
-    int index;
+    int nodeIdx;
     double wakeupIntervalLook;
 
     bool useCorrection;

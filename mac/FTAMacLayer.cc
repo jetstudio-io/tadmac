@@ -88,6 +88,8 @@ void FTAMacLayer::initialize(int stage) {
         // init the dropped packet info
         droppedPacket.setReason(DroppedPacket::NONE);
         nicId = getNic()->getId();
+        nodeIdx = getNode()->getIndex();
+//        cout << "FTA: " << getNode()->getIndex() << " | " << nodeIdx << endl;
         WATCH(macState);
     } else if (stage == 1) {
 
@@ -119,7 +121,6 @@ void FTAMacLayer::initialize(int stage) {
             ACKsent = new cMessage("ACK_SENT");
             ACKsent->setKind(ACK_SENT);
 
-            int nodeIdx = getNode()->getIndex();
             TSR_length = 4;
             // allocate memory & initialize for TSR bank
             TSR_bank = new int*[numberSender+1];
@@ -694,7 +695,13 @@ void FTAMacLayer::handleDataPacket (cMessage *msg) {
 }
 
 double FTAMacLayer::getCCA() {
-    double tmp = maxCCA * (waitWB - timeWaitWB.dbl()) / waitWB;
+//    double tmp = 0.001;
+//    if (timeWaitWB.dbl() < waitCCA + waitDATA + maxCCA) {
+//        tmp = maxCCA * (waitCCA + waitDATA + maxCCA - timeWaitWB.dbl()) / (waitCCA + waitDATA + maxCCA);
+//    } else {
+//        tmp = maxCCA * (waitWB - timeWaitWB.dbl()) / waitWB;
+//    }
+    double tmp = (double)nodeIdx / 1000;
     return tmp;
 }
 
@@ -710,15 +717,7 @@ void FTAMacLayer::scheduleNextWakeup() {
     simtime_t min = 100000;
     // Find the nearest wakeup time
     for (int i = 1; i <= numberSender; i++) {
-        // if already pass the wakeup moment for this node
-        // -> calculate nextwakeup for this node with 0 in TSR
-        if (nextWakeupTime[i] < simTime().dbl() - waitWB) {
-            while (nextWakeupTime[i] < simTime().dbl()) {
-                writeLog(i);
-                calculateNextInterval(i);
-            }
-//            cout << endl;
-        }
+        // find out the closest wakeup moment
         if (nextWakeupTime[i] < min.dbl()) {
             min = nextWakeupTime[i];
         }
@@ -726,13 +725,16 @@ void FTAMacLayer::scheduleNextWakeup() {
 
     // find the nodes need to wakeup to receive data
     for (int i = 1; i <= numberSender; i++) {
-        if (nextWakeupTime[i] < min.dbl() + (waitCCA + waitDATA + maxCCA)) {
+        if (nextWakeupTime[i] < min.dbl() + 3 * waitCCA || nextWakeupTime[i] < simTime().dbl()) {
             if (nextWakeupTime[i] > nextWakeup.dbl()) {
                 nextWakeup = nextWakeupTime[i];
             }
             // mark that this node is chosen
             nodeChosen[i] = 1;
         }
+    }
+    if (nextWakeup < simTime()) {
+        nextWakeup = simTime();
     }
     scheduleAt(nextWakeup, wakeup);
 }
@@ -858,7 +860,7 @@ void FTAMacLayer::handleLowerControl(cMessage *msg) {
         }
 
     } else {
-        debugEV << "control message with wrong kind -- deleting\n";
+        cout << "control message with wrong kind:" << msg->getKind() << endl;
     }
     delete msg;
 }
@@ -920,7 +922,7 @@ void FTAMacLayer::sendDataPacket() {
     pkt->setByteLength(16);
     pkt->setIdle(int(timeWaitWB.dbl() * 1000));
     pkt->setWbMiss(wbMiss);
-    pkt->setNodeId(getNode()->getIndex());
+    pkt->setNodeId(nodeIdx);
     attachSignal(pkt);
     sendDown(pkt);
     delete tmp;
