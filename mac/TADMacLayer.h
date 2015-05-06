@@ -112,6 +112,8 @@ protected:
     long nbRecvdAcks;
     long nbDroppedDataPackets;
     long nbTxAcks;
+
+    int numWUConvergent;
     /*@}*/
 
     // Note type

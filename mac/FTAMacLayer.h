@@ -110,6 +110,8 @@ protected:
     long nbRecvdAcks;
     long nbDroppedDataPackets;
     long nbTxAcks;
+
+    int numWUConvergent;
     /*@}*/
 
     // Note type
@@ -125,7 +127,7 @@ protected:
     /** @brief store the moment wakeup, will be used to calculate the rest time */
     simtime_t startWake;
     /** store the moment the sender wait for WB */
-    simtime_t timeWaitWB;
+    double timeWaitWB;
 
     double wakeupInterval;
     double waitCCA;

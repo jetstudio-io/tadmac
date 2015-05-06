@@ -78,6 +78,7 @@ void FTAMacLayer::initialize(int stage) {
         nbRecvdAcks = 0;
         nbDroppedDataPackets = 0;
         nbTxAcks = 0;
+        numWUConvergent = 0;
 
         txAttempts = 0;
         lastDataPktDestAddr = LAddress::L2BROADCAST;
@@ -260,6 +261,7 @@ void FTAMacLayer::finish() {
                 converter << "nbRxData_" << i;
                 recordScalar(converter.str().c_str(), nbRxData[i]);
             }
+            recordScalar("numWUConvergent", numWUConvergent);
         }
     }
 }
@@ -327,7 +329,7 @@ void FTAMacLayer::handleUpperMsg(cMessage *msg) {
             cancelEvent(rxWBTimeout);
         }
         macState = SLEEP;
-        changeMACState();
+//        changeMACState();
         wbMiss++;
         iwuVec[1].record((simTime().dbl() - startWake.dbl()) * 1000);
         scheduleAt(simTime(), wakeupDATA);
@@ -423,8 +425,8 @@ void FTAMacLayer::handleSelfMsgSender(cMessage *msg) {
                 // Calculate the number WB missed
                 wbMiss++;
                 // log the time wait for WB
-                timeWaitWB = simTime() - startWake;
-                iwuVec[1].record(timeWaitWB.dbl() * 1000);
+                timeWaitWB = simTime().dbl() - startWake.dbl();
+                iwuVec[1].record(timeWaitWB * 1000);
                 return;
             }
             // duration the WAIT_WB, received the WB message -> change to CCA state & schedule the timeout event
@@ -439,8 +441,8 @@ void FTAMacLayer::handleSelfMsgSender(cMessage *msg) {
                     return;
                 }
                 // log the time wait for WB
-                timeWaitWB = simTime() - startWake;
-                iwuVec[1].record(timeWaitWB.dbl() * 1000);
+                timeWaitWB = simTime().dbl() - startWake.dbl();
+                iwuVec[1].record(timeWaitWB * 1000);
                 // Receiver is the node which send WB packet
                 receiverAddress = mac->getSrcAddr();
                 nbRxWB++;
@@ -608,7 +610,6 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
             }
             // Receive data -> wait CCA to send ACK
             if (msg->getKind() == DATA) {
-                nbRxDataPackets++;
                 // control the data packet
                 handleDataPacket(msg);
                 // cancel event
@@ -621,7 +622,7 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
 
                     // reset cca attempt number
                     ccaAttempts = 0;
-                    scheduleAt(simTime() + waitCCA, ccaACKTimeout);
+                    scheduleAt(simTime() + numberSender * 0.001 + 0.002, ccaACKTimeout);
                 } else {
                     // if no use ACK, wait for other DATA packet
                     scheduleAt(simTime() + waitDATA, rxDATATimeout);
@@ -687,6 +688,7 @@ void FTAMacLayer::handleDataPacket (cMessage *msg) {
     // Calculate next wakeup interval
     calculateNextInterval(nodeId, mac);
     nbRxData[nodeId]++;
+    nbRxDataPackets++;
     // Mark that this node already calculated & recevie DATA
     nodeChosen[nodeId] = 0;
     macQueue.push_back(mac->dup());
@@ -696,12 +698,16 @@ void FTAMacLayer::handleDataPacket (cMessage *msg) {
 
 double FTAMacLayer::getCCA() {
 //    double tmp = 0.001;
-//    if (timeWaitWB.dbl() < waitCCA + waitDATA + maxCCA) {
-//        tmp = maxCCA * (waitCCA + waitDATA + maxCCA - timeWaitWB.dbl()) / (waitCCA + waitDATA + maxCCA);
+//    if (timeWaitWB < 3 * waitCCA) {
+//        tmp = waitCCA * (3 * waitCCA - timeWaitWB) / (3 * waitCCA);
 //    } else {
-//        tmp = maxCCA * (waitWB - timeWaitWB.dbl()) / waitWB;
+//        tmp = (double)nodeIdx / 1000;
 //    }
-    double tmp = (double)nodeIdx / 1000;
+//    int idxTmp = (nodeIdx % 3);
+//    if (idxTmp == 0) {
+//        idxTmp = 3;
+//    }
+    double tmp = (double)(nodeIdx) / 1000;
     return tmp;
 }
 
@@ -782,6 +788,14 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
 
             nodeWakeupInterval[nodeId] = nextWakeupTimeTmp - nextWakeupTime[nodeId];
             nextWakeupTime[nodeId] = nextWakeupTimeTmp;
+
+            /**
+             * This is first time of convergent
+             */
+            if (numWUConvergent == 0) {
+                numWUConvergent = numberWakeup;
+                recordScalar("convergentTime", simTime());
+            }
         } else {
             nodeWakeupInterval[nodeId] += sysClock * sysClockFactor;
             nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
@@ -860,7 +874,7 @@ void FTAMacLayer::handleLowerControl(cMessage *msg) {
         }
 
     } else {
-        cout << "control message with wrong kind:" << msg->getKind() << endl;
+        cout << "control message with wrong kind:" << msg->getKind() << " node idx: " << nodeIdx << " mac state: " << macState << endl;
     }
     delete msg;
 }
@@ -920,7 +934,7 @@ void FTAMacLayer::sendDataPacket() {
     pkt->setName("DATA");
     pkt->setKind(DATA);
     pkt->setByteLength(16);
-    pkt->setIdle(int(timeWaitWB.dbl() * 1000));
+    pkt->setIdle(int(timeWaitWB * 1000));
     pkt->setWbMiss(wbMiss);
     pkt->setNodeId(nodeIdx);
     attachSignal(pkt);

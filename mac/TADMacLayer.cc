@@ -77,6 +77,7 @@ void TADMacLayer::initialize(int stage) {
         nbRecvdAcks = 0;
         nbDroppedDataPackets = 0;
         nbTxAcks = 0;
+        numWUConvergent = 0;
 
         txAttempts = 0;
         lastDataPktDestAddr = LAddress::L2BROADCAST;
@@ -262,6 +263,7 @@ void TADMacLayer::finish() {
                 converter << "nbRxData_" << i;
                 recordScalar(converter.str().c_str(), nbRxData[i]);
             }
+            recordScalar("numWUConvergent", numWUConvergent);
         }
     }
 }
@@ -334,7 +336,7 @@ void TADMacLayer::handleUpperMsg(cMessage *msg) {
             cancelEvent(rxWBTimeout);
         }
         macState = SLEEP;
-        changeMACState();
+//        changeMACState();
         iwuVec[1].record((simTime().dbl() - startWake.dbl()) * 1000);
         scheduleAt(simTime(), wakeupDATA);
     }
@@ -715,7 +717,7 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
             }
         }
     }
-    x1 = n01 * nc01 * 2 / TSR_length - n11 * nc11 * 2 / TSR_length;
+    x1 = double(n01 * nc01 * 2) / TSR_length - double(n11 * nc11 * 2) / TSR_length;
     // Calculate X2
     for (int i = TSR_length / 2; i < TSR_length; i++) {
         if (TSR_bank[currentNode][i] == 1) {
@@ -730,7 +732,7 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
             }
         }
     }
-    x2 = n02 * nc02 * 2 / TSR_length - n12 * nc12 * 2 / TSR_length;
+    x2 = double(n02 * nc02 * 2) / TSR_length - double(n12 * nc12 * 2) / TSR_length;
 
     // calculate the traffic weighting
     double mu = alpha * x1 + (1 - alpha) * x2;
@@ -791,7 +793,7 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
     /**
      * New way to calculate the Iwu if mu = 0
      */
-    if (mu * 100 == 0) {
+    if (x1 == 0 && x2 == 0) {
         double idle = 0;
         // calculate only when receive data
         if (msg != NULL) {
@@ -813,6 +815,13 @@ void TADMacLayer::calculateNextInterval(cMessage *msg) {
                 }
                 nodeIdle[currentNode][0] = nodeIdle[currentNode][1] = -1;
                 nodeIndex[currentNode] = 0;
+                /**
+                 * This is first time of convergent
+                 */
+                if (numWUConvergent == 0) {
+                    numWUConvergent = numberWakeup;
+                    recordScalar("convergentTime", simTime());
+                }
             }
             nodeIdle[currentNode][0] = nodeIdle[currentNode][1];
             nodeIdle[currentNode][1] = -1;
