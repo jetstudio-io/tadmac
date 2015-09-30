@@ -30,10 +30,9 @@
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
 #include <MacPktFTA_m.h>
+#include <MacPktWB_m.h>
 
 using namespace std;
-
-class MacPktTAD;
 
 /**
  * @class FTAMacLayer
@@ -66,6 +65,7 @@ public:
     {}
 
     typedef MacPktFTA* macpktfta_ptr_t;
+    typedef MacPktWB* macpktwb_prt_t;
 
     virtual ~FTAMacLayer();
 
@@ -89,6 +89,9 @@ public:
 
     /** @brief Handle self messages such as timers used by receiver */
     virtual void handleSelfMsgReceiver(cMessage*);
+
+    /** @brief Handle self messages such as timers used by re-transmitter */
+    virtual void handleSelfMsgTransmitter(cMessage*);
 
     /** @brief Handle control messages from lower layer */
     virtual void handleLowerControl(cMessage *msg);
@@ -206,6 +209,8 @@ protected:
     /*@{*/
     LAddress::L2Type lastDataPktSrcAddr;
     LAddress::L2Type lastDataPktDestAddr;
+    LAddress::L2Type backHost;
+    int idxOffset;
     int txAttempts;
     /*@}*/
 
@@ -272,6 +277,7 @@ protected:
     double *sentWB;
     double globalSentWB;
     double **nodeIdle;
+    double startWaitWB;
     int *nodeIndex;
     int **TSR_bank;
     int *nodeNumberWakeup;
