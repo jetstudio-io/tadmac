@@ -41,6 +41,7 @@ import org.mixim.base.modules.BaseMacLayer;
 
 //****************
 // Version 1.1: support multi senders
+// Version 3.0: multi-hop communication: single sender with routing table fixed
 //****************
 
 simple FTAMacLayer extends BaseMacLayer
@@ -71,6 +72,10 @@ simple FTAMacLayer extends BaseMacLayer
         double waitDATA @unit(s) = default(0.02s); //time to wait DATA is 20ms
         // system clock - we calculate by 1ms
         double sysClock @unit(s) = default(0.001s);
+        
+//        string nextHost = default("ff:ff:ff:ff:ff:ff");
+        string backHost = default("ff:ff:ff:ff:ff:ff");
+        int idxOffset = default(0);
         
         // system clock factor
         int sysClockFactor = default(75);

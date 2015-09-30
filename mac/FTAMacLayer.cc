@@ -16,6 +16,7 @@
 /**
  * Version 1.1: support multi senders
  * Version 2.0: WB is broadcast
+ * Version 3.0: Multihop - single sender
  */
 
 #include "FTAMacLayer.h"
@@ -46,7 +47,7 @@ void FTAMacLayer::initialize(int stage) {
         srand(time(NULL));
         BaseLayer::catDroppedPacketSignal.initialize();
 
-        /* get sepecific parameters for TADMAC */
+        /* get sepecific parameters for FTAMAC */
         role = static_cast<ROLES>(hasPar("role") ? par("role") : 1);
 
         wakeupInterval = hasPar("WUIInit") ? par("WUIInit") : 0.1;
@@ -69,6 +70,10 @@ void FTAMacLayer::initialize(int stage) {
         useMacAcks = hasPar("useMACAcks") ? par("useMACAcks") : false;
         maxTxAttempts = hasPar("maxTxAttempts") ? par("maxTxAttempts") : 2;
 
+        idxOffset = hasPar("idxOffset") ? par("idxOffset") : 0;
+
+        waitCCA = headerLength / bitrate;
+
         stats = par("stats");
         nbTxDataPackets = 0;
         nbTxWB = 0;
@@ -83,6 +88,7 @@ void FTAMacLayer::initialize(int stage) {
         txAttempts = 0;
         lastDataPktDestAddr = LAddress::L2BROADCAST;
         lastDataPktSrcAddr = LAddress::L2BROADCAST;
+        backHost.setAddress(hasPar("backHost") ? par("backHost") : "ff:ff:ff:ff:ff:ff");
 
         macState = INIT;
 
@@ -94,7 +100,7 @@ void FTAMacLayer::initialize(int stage) {
         WATCH(macState);
     } else if (stage == 1) {
 
-        if (role == NODE_RECEIVER) {
+        if (role == NODE_RECEIVER || role == NODE_TRANSMITER) {
             /**
              * Initialization of events for recevier
              */
@@ -167,10 +173,34 @@ void FTAMacLayer::initialize(int stage) {
                 nbRxData[i] = 0;
             }
             iwuVec = new cOutVector[numberSender+1];
-            for (int i = 1; i <= numberSender; i++) {
+            for (int i = 0; i <= numberSender; i++) {
                 ostringstream converter;
                 converter << "Iwu_" << (i + nodeIdx);
                 iwuVec[i].setName(converter.str().c_str());
+            }
+
+            // allocate memory for message to control state
+            if (role == NODE_TRANSMITER) {
+                wakeupDATA = new cMessage("WAKE_UP_DATA");
+                wakeupDATA->setKind(WAKE_UP_DATA);
+
+                rxWBTimeout = new cMessage("RX_WB_TIMEOUT");
+                rxWBTimeout->setKind(RX_WB_TIMEOUT);
+
+                WBreceived = new cMessage("WB_RECEIVED");
+                WBreceived->setKind(WB_RECEIVED);
+
+                ccaDATATimeout = new cMessage("CCA_DATA_TIMEOUT");
+                ccaDATATimeout->setKind(CCA_DATA_TIMEOUT);
+
+                DATAsent = new cMessage("DATA_SENT");
+                DATAsent->setKind(DATA_SENT);
+
+                waitACKTimeout = new cMessage("WAIT_ACK_TIMEOUT");
+                waitACKTimeout->setKind(WAIT_ACK_TIMEOUT);
+
+                ACKreceived = new cMessage("ACK_RECEIVED");
+                ACKreceived->setKind(ACK_RECEIVED);
             }
         } else {
             /**
@@ -622,11 +652,12 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
 
                     // reset cca attempt number
                     ccaAttempts = 0;
-                    scheduleAt(simTime() + numberSender * 0.001 + 0.002, ccaACKTimeout);
-                } else {
-                    // if no use ACK, wait for other DATA packet
-                    scheduleAt(simTime() + waitDATA, rxDATATimeout);
+                    scheduleAt(simTime() + waitCCA, ccaACKTimeout);
                 }
+//                else {
+//                    // if no use ACK, wait for other DATA packet
+//                    scheduleAt(simTime() + waitDATA, rxDATATimeout);
+//                }
                 return;
             }
             break;
@@ -638,7 +669,7 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
                 changeMACState();
                 return;
             }
-            // if receive data ->
+            // if receive data -> Store DATA to queue
             if (msg->getKind() == DATA) {
                 handleDataPacket(msg);
                 // Radio is free to send ACK
@@ -650,20 +681,281 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
         case SENDING_ACK:
             if (msg->getKind() == ACK_SENT) {
                 // If in queue, there are the packet need to send ACK -> call directly function sendMacAck
-                if (macQueue.size()) {
-                    sendMacAck();
-                } else {
-                    macState = WAIT_DATA;
-                    changeMACState();
-                    // come back to wait other data
-                    scheduleAt(simTime() + waitDATA, rxDATATimeout);
+//                if (macQueue.size()) {
+//                    sendMacAck();
+//                } else {
+//                    macState = WAIT_DATA;
+//                    changeMACState();
+//                    // come back to wait other data
+//                    scheduleAt(simTime() + waitDATA, rxDATATimeout);
+//                }
+
+                macState = SLEEP;
+                changeMACState();
+                // calculate Iwu for the node that is chosen but didn't receive data
+                for (int i = 1; i <= numberSender; i++) {
+                    if (nodeChosen[i] == 1) {
+                        calculateNextInterval(i);
+                        nodeChosen[i] = 0;
+                    }
                 }
+                // schedule for next wakeup time
+                scheduleNextWakeup();
+
                 return;
             }
             break;
     }
     opp_error("Undefined event of type %d in state %d (Radio state %d)!",
             msg->getKind(), macState, phy->getRadioState());
+}
+
+void FTAMacLayer::handleSelfMsgTransmitter(cMessage *msg) {
+    switch (macState) {
+    // Call at first time after initialize the note
+        case INIT:
+            if (msg->getKind() == START) {
+                macState = SLEEP;
+                changeMACState();
+                scheduleNextWakeup();
+                return;
+            }
+            break;
+        // This node is sleeping & time to wakeup
+        case SLEEP:
+            if (msg->getKind() == WAKE_UP) {
+                macState = CCA_WB;
+                changeMACState();
+                // schedule the event wait WB timeout
+                startWake = simTime();
+                // reset CCA attempts
+                ccaAttempts = 0;
+                scheduleAt(simTime() + waitCCA, ccaWBTimeout);
+                numberWakeup++;
+                writeLog();
+                return;
+            }
+            /* @TODO handle if wakeup to send data */
+            break;
+        // Check channel is free -> send WB
+        case CCA_WB:
+            if (msg->getKind() == CCA_WB_TIMEOUT) {
+                if (phy->getChannelState().isIdle()) {
+                    // Send WB to sender - this action will be executed when radio change state successful
+                    macState = SENDING_WB;
+                    changeMACState();
+                    // Don't need to schedule sent wb event here, this event will be call when physical layer finish
+                    return;
+                } else {
+                    ccaAttempts++;
+                    if (ccaAttempts < 3) {
+                        macState = CCA_WB;
+                        scheduleAt(simTime() + waitCCA, ccaWBTimeout);
+                    } else {
+                        // Turn back to SLEEP state
+                        macState = SLEEP;
+                        changeMACState();
+                        // calculate Iwu for the node that is chosen but didn't receive data
+                        for (int i = 1; i <= numberSender; i++) {
+                            if (nodeChosen[i] == 1) {
+                                calculateNextInterval(i);
+                                nodeChosen[i] = 0;
+                            }
+                        }
+                        // schedule for next wakeup time
+                        scheduleNextWakeup();
+                    }
+                }
+            }
+            break;
+        // WB is sent -> wait for DATA
+        case SENDING_WB:
+            if (msg->getKind() == WB_SENT) {
+                // change mac state to send data
+                macState = WAIT_DATA;
+                changeMACState();
+                // Schedule wait data timeout event
+                scheduleAt(simTime() + waitDATA, rxDATATimeout);
+                // Store the time sent WB - used to calculate the Iwu
+                globalSentWB = round(simTime().dbl() * 1000) / 1000;
+                return;
+            }
+            break;
+
+        case WAIT_DATA:
+            // if wait data timeout
+            if (msg->getKind() == RX_DATA_TIMEOUT) {
+                // Go to sleep if does not have owner data
+                macState = SLEEP;
+                changeMACState();
+
+                // calculate Iwu for the node that is chosen but didn't receive data
+                for (int i = 1; i <= numberSender; i++) {
+                    if (nodeChosen[i] == 1) {
+                        calculateNextInterval(i);
+                        nodeChosen[i] = 0;
+                    }
+                }
+                // schedule for next wakeup time
+                scheduleNextWakeup();
+
+                // @TODO send data
+                return;
+            }
+            // Receive data -> send ACK
+            if (msg->getKind() == DATA) {
+
+                // control the data packet
+                handleDataPacket(msg);
+                // cancel event
+                cancelEvent(rxDATATimeout);
+                // Send ACK to sender or retransmitter
+                macState = CCA_ACK;
+                ccaAttempts = 0;
+                changeMACState();
+                scheduleAt(simTime() + waitCCA, ccaACKTimeout);
+                return;
+            }
+            break;
+        case CCA_ACK:
+            if (msg->getKind() == CCA_ACK_TIMEOUT) {
+                // Radio is free to send ACK
+                if (phy->getChannelState().isIdle()) {
+                    macState = SENDING_ACK;
+                    changeMACState();
+                } else {
+                    ccaAttempts++;
+                    if (ccaAttempts < 3) {
+                        macState = CCA_ACK;
+                        scheduleAt(simTime() + waitCCA, ccaACKTimeout);
+                    } else {
+                        // Turn back to SLEEP state
+                        macState = SLEEP;
+                        changeMACState();
+                        // calculate Iwu for the node that is chosen but didn't receive data
+                        for (int i = 1; i <= numberSender; i++) {
+                            if (nodeChosen[i] == 1) {
+                                calculateNextInterval(i);
+                                nodeChosen[i] = 0;
+                            }
+                        }
+                        // schedule for next wakeup time
+                        scheduleNextWakeup();
+                    }
+                }
+                return;
+            }
+            break;
+        // @TODO Need to handle multiple sender -> receive multiple DATA packet
+        case SENDING_ACK:
+            if (msg->getKind() == ACK_SENT) {
+                //Recalculate timewaitWB
+                startWaitWB = simTime().dbl();
+            }
+            break;
+        // The sender is in state WAIT_WB & receive a message
+        case WAIT_WB:
+            // If do not receive WB packet -> go to sleep
+            if (msg->getKind() == RX_WB_TIMEOUT) {
+                // Turn back to SLEEP state
+                macState = SLEEP;
+                changeMACState();
+                // Calculate the number WB missed
+                wbMiss++;
+                // schedule for next wakeup time
+                scheduleNextWakeup();
+                return;
+            }
+            // duration the WAIT_WB, received the WB message -> change to CCA state & schedule the timeout event
+            if (msg->getKind() == WB) {
+                macpktwb_prt_t mac  = static_cast<macpktwb_prt_t>(msg);
+                const LAddress::L2Type& src = mac->getSrcAddr();
+                if (src == backHost) {
+                    macState = CCA_DATA;
+                    scheduleAt(simTime() + waitCCA, ccaDATATimeout);
+                    // log the time wait for WB
+                    timeWaitWB = simTime().dbl() - startWaitWB;
+                }
+                mac = NULL;
+                // Drop this message
+                delete msg;
+                msg = NULL;
+                return;
+            }
+            break;
+        case CCA_DATA:
+            if (msg->getKind() == CCA_DATA_TIMEOUT) {
+                macState = SENDING_DATA;
+                changeMACState();
+                // change mac state to send data
+                // in this case, we don't need to schedule the event to handle when data is sent
+                // this event will be call when the physic layer finished
+                return;
+            }
+
+            break;
+
+        case SENDING_DATA:
+            // Finish send data to receiver
+            if (msg->getKind() == DATA_SENT) {
+                macState = WAIT_ACK;
+                changeMACState();
+                // schedule the event wait ACK timeout
+                scheduleAt(simTime() + waitACK, waitACKTimeout);
+
+                return;
+            }
+            break;
+
+        case WAIT_ACK:
+            if (msg->getKind() == WAIT_ACK_TIMEOUT) {
+                macState = SLEEP;
+                changeMACState();
+                nbMissedAcks++;
+                //@TODO: resend data
+                // if the number resend data is not reach max time
+//                if (txAttempts < maxTxAttempts) {
+//                    macState = WAIT_WB;
+//                    changeMACState();
+//                    txAttempts++;
+//
+//                    // schedule the event wait WB timeout
+//                    scheduleAt(simTime() + waitWB, rxWBTimeout);
+//                    // store the moment to wait WB
+//                    timeWaitWB = simTime();
+//                    nbMissedAcks++;
+//                } else {
+//                    macState = SLEEP;
+//                    changeMACState();
+//                    nbMissedAcks++;
+//                }
+                return;
+            }
+            // received ACK
+            if (msg->getKind() == ACK) {
+                //remove event wait ack timeout
+                cancelEvent(waitACKTimeout);
+                // Remove packet in queue
+                delete macQueue.front();
+                macQueue.pop_front();
+                wbMiss = 0;
+
+                macState = SLEEP;
+                changeMACState();
+
+                // calculate Iwu for the node that is chosen but didn't receive data
+                for (int i = 1; i <= numberSender; i++) {
+                    if (nodeChosen[i] == 1) {
+                        calculateNextInterval(i);
+                        nodeChosen[i] = 0;
+                    }
+                }
+                // schedule for next wakeup time
+                scheduleNextWakeup();
+                return;
+            }
+            break;
+    }
 }
 
 void FTAMacLayer::handleDataPacket (cMessage *msg) {
@@ -831,6 +1123,8 @@ void FTAMacLayer::handleSelfMsg(cMessage *msg) {
     // Check role of this node
     if (role == NODE_SENDER) {
         handleSelfMsgSender(msg);
+    } else if (role == NODE_TRANSMITER) {
+        handleSelfMsgTransmitter(msg);
     } else {
         handleSelfMsgReceiver(msg);
     }

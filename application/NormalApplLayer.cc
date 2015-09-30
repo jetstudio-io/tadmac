@@ -140,7 +140,7 @@ void NormalApplLayer::initialize(int stage) {
 		    if (initializationTime > 0) {
 		        scheduleAt(simTime() + initializationTime, delayTimer);
 		    } else {
-		        scheduleAt(simTime() + uniform(0, trafficParam * 2), delayTimer);
+		        scheduleAt(simTime() + uniform(0, trafficParam), delayTimer);
 		    }
 		}
 		if (stats) {
@@ -332,6 +332,9 @@ void NormalApplLayer::sendData() {
 	emit(BaseLayer::catPacketSignal, &packet);
 	sentPackets++;
 	scheduleNextPacket();
+	if (firstPacketGeneration < 0) {
+	    firstPacketGeneration = simTime();
+	}
 }
 
 void NormalApplLayer::finish() {
