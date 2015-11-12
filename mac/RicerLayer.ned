@@ -81,7 +81,7 @@ simple RicerLayer extends BaseMacLayer
         double bitrate @unit(bps) = default(19200 bps);
         
         //tx power [mW]
-        double txPower @unit(mW) = default(50 mW);
+        double txPower @unit(mW) = default(1.0 mW);
           
         //should mac send and expect acknowledgments?
         bool useMACAcks = default(false);

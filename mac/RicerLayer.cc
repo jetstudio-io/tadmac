@@ -24,6 +24,8 @@
 #include "PhyUtils.h"
 #include "MacPkt_m.h"
 #include "MacToPhyInterface.h"
+#include "BaseDecider.h"
+#include "Decider802154Narrow.h"
 
 Define_Module(RicerLayer)
 
@@ -49,7 +51,7 @@ void RicerLayer::initialize(int stage) {
 //        dataduration = 20 * headerLength / bitrate;
         debugEV << "headerLength: " << headerLength << ", bitrate: " << bitrate << endl;
 
-        txPower = hasPar("txPower") ? par("txPower") : 50;
+        txPower = hasPar("txPower") ? par("txPower") : 1.0;
         useMacAcks = hasPar("useMACAcks") ? par("useMACAcks") : false;
         maxTxAttempts = par("macMaxFrameRetries");
         stats = par("stats");
@@ -64,6 +66,7 @@ void RicerLayer::initialize(int stage) {
         nbPacketDrop = 0;
         nbTxRelayData = 0;
         nbRxRelayData = 0;
+        nbPacketError = 0;
 
         txAttempts = 0;
         lastDataPktDestAddr = LAddress::L2BROADCAST;
@@ -76,6 +79,7 @@ void RicerLayer::initialize(int stage) {
         droppedPacket.setReason(DroppedPacket::NONE);
         nicId = getNic()->getId();
         WATCH(macState);
+        std::cout << txPower << std::endl;
     }
 
     else if (stage == 1) {
@@ -150,6 +154,7 @@ void RicerLayer::finish() {
         recordScalar("nbRecvdAcks", nbRecvdAcks);
         recordScalar("nbTxAcks", nbTxAcks);
         recordScalar("nbDroppedDataPackets", nbDroppedDataPackets);
+        recordScalar("nbPacketError", nbPacketError);
         //recordScalar("timeSleep", timeSleep);
         //recordScalar("timeRX", timeRX);
         //recordScalar("timeTX", timeTX);
@@ -282,6 +287,11 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         }
         // if receive beacon
         if (msg->getKind() == Ricer_BEACON) {
+            // if error in receiving packet - do nothing
+            if (packetError) {
+                delete msg;
+                return;
+            }
             nbRxBeacons++;
             if (macQueue.size() > 0) {
                 MacPkt *pkt = macQueue.front()->dup();
@@ -378,6 +388,10 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
             return;
         }
         if (msg->getKind() == Ricer_ACK) {
+            if (packetError) {
+                delete msg;
+                return;
+            }
             debugEV << "State WAIT_ACK, message Ricer_ACK" << endl;
             MacPkt* mac = static_cast<MacPkt *>(msg);
             const LAddress::L2Type& src = mac->getSrcAddr();
@@ -412,6 +426,10 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         break;
     case WAIT_DATA:
         if (msg->getKind() == Ricer_DATA) {
+            if (packetError) {
+                delete msg;
+                return;
+            }
             cancelEvent(data_timeout);
             nbRxDataPackets++;
             MacPkt* mac = static_cast<MacPkt *>(msg);
@@ -508,6 +526,7 @@ void RicerLayer::handleLowerControl(cMessage *msg) {
         if (macState == WAIT_TX_ACK_OVER) {
             scheduleAt(simTime(), ack_tx_over);
         }
+        packetError = false;
     }
     // MiximRadio switching (to RX or TX) ir over, ignore switching to SLEEP.
     else if (msg->getKind() == MacToPhyInterface::RADIO_SWITCHING_OVER) {
@@ -529,8 +548,16 @@ void RicerLayer::handleLowerControl(cMessage *msg) {
             macState = WAIT_TX_DATA_OVER;
             sendDataPacket();
         }
+        packetError = false;
     } else {
-        std::cout << "control message with wrong kind -- deleting\n";
+        if (msg->getKind() == BaseDecider::PACKET_DROPPED) {
+            packetError = true;
+            nbPacketError++;
+        } else if (msg->getKind() == Decider802154Narrow::RECEPTION_STARTED) {
+
+        } else {
+            std::cout << "control message with wrong kind (" << msg->getKind() << ") -- deleting\n";
+        }
     }
     delete msg;
 }

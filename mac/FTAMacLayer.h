@@ -59,7 +59,7 @@ public:
                 wakeup(NULL), ccaWBTimeout(NULL), WBsent(NULL), rxDATATimeout(NULL), DATAreceived(NULL), ccaACKTimeout(NULL), ACKsent(NULL),
                 lastDataPktSrcAddr(), lastDataPktDestAddr(),
                 txAttempts(0), droppedPacket(), nicId(-1), queueLength(0), animation(false),
-                bitrate(0), txPower(0),
+                bitrate(0), txPower(1.0),
                 useMacAcks(0), maxTxAttempts(0), stats(false), wakeupIntervalLook(0),
                 numberWakeup(0), sysClockFactor(75), numberSender(1)
     {}
@@ -102,6 +102,8 @@ protected:
     /** @brief A queue to store packets from upper layer in case another
      packet is still waiting for transmission.*/
     MacQueue macQueue;
+    // A queue to store ACK packets need to be sent
+    MacQueue ackQueue;
 
     /** @name Different tracked statistics.*/
     /*@{*/
@@ -243,6 +245,8 @@ protected:
     /** @brief Gather stats at the end of the simulation */
     bool stats;
 
+    bool packetError;
+
     /** @brief Possible colors of the node for animation */
     enum COLOR {
         GREEN = 1, BLUE = 2, RED = 3, BLACK = 4, YELLOW = 5
@@ -285,9 +289,13 @@ protected:
     LAddress::L2Type *routeTable;
     LAddress::L2Type receiverAddress;
 
+    bool *sourceNode;
+
     static const int maxCCAattempts = 2;
     int ccaAttempts;
     int wbMiss;
+    double lastData;
+    double newIwu;
 
     int nbCollision;
     int *nodeCollision;
@@ -315,7 +323,7 @@ protected:
     /** @brief Internal function to add a new packet from upper to the queue */
     bool addToQueue(cMessage *msg);
 
-    void handleDataPacket(cMessage *msg);
+    bool handleDataPacket(cMessage *msg);
     double getCCA();
 
     /** @brief Calculate the next wakeup interval*/

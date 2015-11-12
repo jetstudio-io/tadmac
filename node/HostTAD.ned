@@ -22,4 +22,5 @@ module HostTAD extends WirelessNodeBattery
     parameters:
         arpType = default("org.mixim.modules.netw.ArpHost");
         nicType = default("tadmac.modules.nic.NicTAD");
+        @display("bgb=210,450,white;i=device/palm_vs;i2=status/battery;b=16,16,rect;is2=vs");
 }

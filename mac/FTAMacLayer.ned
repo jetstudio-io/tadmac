@@ -54,9 +54,9 @@ simple FTAMacLayer extends BaseMacLayer
         
         // Define the role of node
         // 0 - receiver
-        // 1 - sender (default)
-        // 2 - transmiter : will be implemented later
-        int role = default(1);
+        // 1 - sender
+        // 2 - transmiter (default)
+        int role = default(2);
         
         // time for CCA
         double waitCCA @unit(s) = default(0.005s); //CCA time 5ms
@@ -75,7 +75,7 @@ simple FTAMacLayer extends BaseMacLayer
         
 //        string nextHost = default("ff:ff:ff:ff:ff:ff");
         string backHost = default("ff:ff:ff:ff:ff:ff");
-        int idxOffset = default(0);
+        string sources = default("");
         
         // system clock factor
         int sysClockFactor = default(75);
@@ -103,7 +103,7 @@ simple FTAMacLayer extends BaseMacLayer
         double bitrate @unit(bps) = default(250000 bps);
         
         //tx power [mW]
-        double txPower @unit(mW) = default(50 mW);
+        double txPower @unit(mW) = default(1.0 mW);
           
         //should mac send and expect acknowledgments?
         bool useMACAcks = default(true);

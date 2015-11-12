@@ -34,6 +34,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <MacPkt_m.h>
+#include "tool.h"
+#include "BaseDecider.h"
+#include "Decider802154Narrow.h"
 
 Define_Module(FTAMacLayer)
 
@@ -66,7 +69,7 @@ void FTAMacLayer::initialize(int stage) {
         animation = hasPar("animation") ? par("animation") : true;
         bitrate = hasPar("bitrate") ? par("bitrate") : 250000.;
         headerLength = hasPar("headerLength") ? par("headerLength") : 10.;
-        txPower = hasPar("txPower") ? par("txPower") : 50.;
+        txPower = hasPar("txPower") ? par("txPower") : 1.;
         useMacAcks = hasPar("useMACAcks") ? par("useMACAcks") : false;
         maxTxAttempts = hasPar("maxTxAttempts") ? par("maxTxAttempts") : 2;
 
@@ -96,7 +99,7 @@ void FTAMacLayer::initialize(int stage) {
         droppedPacket.setReason(DroppedPacket::NONE);
         nicId = getNic()->getId();
         nodeIdx = getNode()->getIndex();
-//        cout << "FTA: " << getNode()->getIndex() << " | " << nodeIdx << endl;
+        cout << "FTA: " << getNode()->getIndex() << " | " << myMacAddr << endl;
         WATCH(macState);
     } else if (stage == 1) {
 
@@ -179,6 +182,17 @@ void FTAMacLayer::initialize(int stage) {
                 iwuVec[i].setName(converter.str().c_str());
             }
 
+            sourceNode = new bool[numberSender+1];
+            for (int i = 0; i <= numberSender; i++) {
+                sourceNode[i] = false;
+            }
+            std::vector<int>sources = split(hasPar("sources") ? par("sources") : "", ',');
+            if (sources.size()) {
+                for (std::vector<int>::iterator it = sources.begin(); it != sources.end(); ++it) {
+                    sourceNode[*it] = true;
+                }
+            }
+
             // allocate memory for message to control state
             if (role == NODE_TRANSMITER) {
                 wakeupDATA = new cMessage("WAKE_UP_DATA");
@@ -232,6 +246,8 @@ void FTAMacLayer::initialize(int stage) {
             iwuVec = new cOutVector[2];
             iwuVec[0].setName("Iwu");
             iwuVec[1].setName("idle");
+            lastData = -1;
+            newIwu = 0;
         }
         lastWakeup = 0;
 //        iwuVec.setName("Iwu");
@@ -344,6 +360,10 @@ void FTAMacLayer::handleUpperMsg(cMessage *msg) {
         return;
     }
     addToQueue(msg);
+    if (lastData >= 0) {
+        newIwu = simTime().dbl() - lastData;
+    }
+    lastData = simTime().dbl();
     // force wakeup now
     if (macState == SLEEP)
     {
@@ -371,7 +391,7 @@ void FTAMacLayer::writeLog(int nodeId) {
         nodeNumberWakeup[nodeId]++;
         iwuVec[nodeId].recordWithTimestamp(nextWakeupTime[nodeId],nodeWakeupInterval[nodeId] * 1000);
     } else {
-        for (int i = 0; i <= numberSender; i++) {
+        for (int i = 1; i <= numberSender; i++) {
             if (nodeChosen[i] >= 1) {
                 nodeNumberWakeup[i]++;
                 iwuVec[i].recordWithTimestamp(nextWakeupTime[i],nodeWakeupInterval[i] * 1000);
@@ -481,7 +501,7 @@ void FTAMacLayer::handleSelfMsgSender(cMessage *msg) {
                 // Don't need to call the event to handle WB timeout
                 cancelEvent (rxWBTimeout);
                 // schedule the CCA timeout event
-                scheduleAt(simTime() + getCCA(), ccaDATATimeout);
+                scheduleAt(simTime() + waitCCA, ccaDATATimeout);
                 // reset ccaAttempts
                 ccaAttempts = 0;
                 mac = NULL;
@@ -547,8 +567,10 @@ void FTAMacLayer::handleSelfMsgSender(cMessage *msg) {
                 //remove event wait ack timeout
                 cancelEvent(waitACKTimeout);
                 // Remove packet in queue
-                delete macQueue.front();
-                macQueue.pop_front();
+                while (macQueue.size() > 0) {
+                    delete macQueue.front();
+                    macQueue.pop_front();
+                }
                 //Delete ACK
                 delete msg;
                 msg = NULL;
@@ -706,8 +728,11 @@ void FTAMacLayer::handleSelfMsgReceiver(cMessage *msg) {
             }
             break;
     }
-    opp_error("Undefined event of type %d in state %d (Radio state %d)!",
-            msg->getKind(), macState, phy->getRadioState());
+    if (msg->getKind() == WB || msg->getKind() == DATA || msg->getKind() == ACK) {
+        delete msg;
+        return;
+    }
+    opp_error("Undefined event of type %d in state %d (Radio state %d)!", msg->getKind(), macState, phy->getRadioState());
 }
 
 void FTAMacLayer::handleSelfMsgTransmitter(cMessage *msg) {
@@ -851,6 +876,10 @@ void FTAMacLayer::handleSelfMsgTransmitter(cMessage *msg) {
             if (msg->getKind() == ACK_SENT) {
                 //Recalculate timewaitWB
                 startWaitWB = simTime().dbl();
+                macState = WAIT_WB;
+                changeMACState();
+                scheduleAt(simTime() + waitWB, rxWBTimeout);
+                return;
             }
             break;
         // The sender is in state WAIT_WB & receive a message
@@ -956,25 +985,25 @@ void FTAMacLayer::handleSelfMsgTransmitter(cMessage *msg) {
             }
             break;
     }
-}
-
-void FTAMacLayer::handleDataPacket (cMessage *msg) {
-    macpktfta_ptr_t mac  = static_cast<macpktfta_ptr_t>(msg);
-    const LAddress::L2Type& dest = mac->getDestAddr();
-    int nodeId = mac->getNodeId();
-    if (nodeId > numberSender) {
+    if (msg->getKind() == WB || msg->getKind() == DATA || msg->getKind() == ACK) {
         delete msg;
-        msg = NULL;
-        mac = NULL;
         return;
     }
-    // If this data packet destination is not for this receiver
-    // wait for right data packet
-    if (dest != myMacAddr) {
+    opp_error("Undefined event of type %d in state %d (Radio state %d)!", msg->getKind(), macState, phy->getRadioState());
+}
+
+bool FTAMacLayer::handleDataPacket (cMessage *msg) {
+    macpktfta_ptr_t mac  = static_cast<macpktfta_ptr_t>(msg);
+    const LAddress::L2Type& dest = mac->getDestAddr();
+    const LAddress::L2Type& originalSrcAddr = mac->getOriginalSrcAddr();
+    int nodeId = mac->getNodeId();
+
+    // receive from backHost -> do nothing
+    if (originalSrcAddr == backHost) {
+        mac = NULL;
         delete msg;
         msg = NULL;
-        mac = NULL;
-        return;
+        return false;
     }
 
     // Calculate next wakeup interval
@@ -983,9 +1012,16 @@ void FTAMacLayer::handleDataPacket (cMessage *msg) {
     nbRxDataPackets++;
     // Mark that this node already calculated & recevie DATA
     nodeChosen[nodeId] = 0;
-    macQueue.push_back(mac->dup());
-    // send mac packet to upper layer
-    sendUp(decapsMsg(mac));
+    // If this data packet is not for this node -> push in queue to retransmit it
+    if (dest != myMacAddr) {
+        macQueue.push_back(mac->dup());
+        return true;
+    } else {
+        // send up the data packet
+        macQueue.push_back(mac->dup());
+        sendUp(decapsMsg(mac));
+        return false;
+    }
 }
 
 double FTAMacLayer::getCCA() {
@@ -1016,14 +1052,14 @@ void FTAMacLayer::scheduleNextWakeup() {
     // Find the nearest wakeup time
     for (int i = 1; i <= numberSender; i++) {
         // find out the closest wakeup moment
-        if (nextWakeupTime[i] < min.dbl()) {
+        if (sourceNode[i] && nextWakeupTime[i] < min.dbl()) {
             min = nextWakeupTime[i];
         }
     }
 
     // find the nodes need to wakeup to receive data
     for (int i = 1; i <= numberSender; i++) {
-        if (nextWakeupTime[i] < min.dbl() + 3 * waitCCA || nextWakeupTime[i] < simTime().dbl()) {
+        if (sourceNode[i] && (nextWakeupTime[i] < min.dbl() + 3 * waitCCA || nextWakeupTime[i] < simTime().dbl())) {
             if (nextWakeupTime[i] > nextWakeup.dbl()) {
                 nextWakeup = nextWakeupTime[i];
             }
@@ -1063,9 +1099,26 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
      */
 //    nodeSumWUInt[nodeId] += nodeWakeupInterval[nodeId];
     if (mac != NULL) {
-        double IwuTotal = globalSentWB - sentWB[nodeId];
-
+        // use new function: calculate by Iwu & t_idle
         double idle = double(mac->getIdle()) / 1000.0;
+        double iwu = double(mac->getIwu()) / 1000.0;
+        if (iwu * 1000 > 0) {
+            if (iwu < idle) {
+                iwu = idle + 0.001;
+            }
+            double tmp = globalSentWB + round((iwu - idle) * 1000)/1000 + 0.0015;
+            nodeWakeupInterval[nodeId] = tmp - nextWakeupTime[nodeId];
+        } else {
+            nodeWakeupInterval[nodeId] += sysClock * sysClockFactor;
+            nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
+        }
+        nextWakeupTime[nodeId] += nodeWakeupInterval[nodeId];
+//        std::cout << "time=" << simTime() << " | iwu=" << iwu << " | idle=" << idle << " | node iwu=" << nodeWakeupInterval[nodeId] << " | nextWakeupTime=" << nextWakeupTime[nodeId] << std::endl;
+        return;
+
+        // old function: calculate by Nww & t_idle
+        double IwuTotal = globalSentWB - sentWB[nodeId];
+        idle = double(mac->getIdle()) / 1000.0;
         int wbMiss = mac->getWbMiss();
         mac = NULL;
         nodeIdle[nodeId][1] = idle;
@@ -1098,6 +1151,12 @@ void FTAMacLayer::calculateNextInterval(int nodeId, macpktfta_ptr_t mac) {
         nodeIdle[nodeId][1] = -1;
         sentWB[nodeId] = globalSentWB;
     } else {
+        // Did not receive the data
+        nodeWakeupInterval[nodeId] += sysClock * sysClockFactor;
+        nodeWakeupInterval[nodeId] = round(nodeWakeupInterval[nodeId] * 1000.0) / 1000.0;
+        nextWakeupTime[nodeId] += nodeWakeupInterval[nodeId];
+        return;
+
         // If we already calculated the WUInt convergent -> use this, don't need to calculate
         if (nodeWakeupIntervalLock[nodeId] > 0) {
             nodeWakeupInterval[nodeId] = nodeWakeupIntervalLock[nodeId];
@@ -1146,6 +1205,7 @@ void FTAMacLayer::handleLowerControl(cMessage *msg) {
         if (macState == SENDING_ACK) {
             scheduleAt(simTime(), ACKsent);
         }
+        packetError = false;
     }
     // Radio switching (to RX or TX) ir over, ignore switching to SLEEP.
     else if (msg->getKind() == MacToPhyInterface::RADIO_SWITCHING_OVER) {
@@ -1166,9 +1226,16 @@ void FTAMacLayer::handleLowerControl(cMessage *msg) {
                 && (phy->getRadioState() == MiximRadio::TX)) {
             sendDataPacket();
         }
-
+        packetError = false;
     } else {
-        cout << "control message with wrong kind:" << msg->getKind() << " node idx: " << nodeIdx << " mac state: " << macState << endl;
+        if (msg->getKind() == BaseDecider::PACKET_DROPPED) {
+            packetError = true;
+//            nbPacketError++;
+        } else if (msg->getKind() == Decider802154Narrow::RECEPTION_STARTED) {
+
+        } else {
+            std::cout << "control message with wrong kind (" << msg->getKind() << ") -- deleting\n";
+        }
     }
     delete msg;
 }
@@ -1231,6 +1298,7 @@ void FTAMacLayer::sendDataPacket() {
     pkt->setIdle(int(timeWaitWB * 1000));
     pkt->setWbMiss(wbMiss);
     pkt->setNodeId(nodeIdx);
+    pkt->setIwu(int(newIwu * 1000));
     attachSignal(pkt);
     sendDown(pkt);
     delete tmp;

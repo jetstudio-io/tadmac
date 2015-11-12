@@ -259,6 +259,8 @@ protected:
     /** @brief Ouput vector tracking the wakeup interval.*/
     cOutVector *iwuVec;
     simtime_t lastWakeup;
+    double lastData;
+    double newIwu;
 
     /**
      * Define variable for multi sender

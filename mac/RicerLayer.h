@@ -84,7 +84,7 @@ class MIXIM_API RicerLayer : public BaseMacLayer
         , nicId(-1)
         , queueLength(0)
         , animation(false)
-        , slotDuration(0), bitrate(0), headerLength(0), checkInterval(0), txPower(0)
+        , slotDuration(0), bitrate(0), headerLength(0), checkInterval(0), txPower(1.0)
         , useMacAcks(0)
         , maxTxAttempts(0)
         , stats(false)
@@ -258,6 +258,9 @@ class MIXIM_API RicerLayer : public BaseMacLayer
     int maxTxAttempts;
     /** @brief Gather stats at the end of the simulation */
     bool stats;
+
+    bool packetError;
+    int nbPacketError;
 
     /** @brief Possible colors of the node for animation */
     enum Ricer_COLORS {
