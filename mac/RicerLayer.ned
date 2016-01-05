@@ -57,6 +57,9 @@ simple RicerLayer extends BaseMacLayer
         string relayAddr = default("ff:ff:ff:ff:ff:ff");
         string forwardAddr = default("ff:ff:ff:ff:ff:ff");
         
+        // how many slot after WB
+        int nbSlot = default(2);
+        
 		// how long is one slot?
 		double slotDuration @unit(s) = default(0.09s);
 		

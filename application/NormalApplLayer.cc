@@ -88,16 +88,29 @@ void NormalApplLayer::initialize(int stage) {
 		        simTime += newIwu;
 		        idx++;
 		    }
+//		    if (nbPacketTotal > idx) {
+//		        i++;
+//		        newIwu = (runTimeTotal - simTime) / (nbPacketTotal - idx);
+//                newIwu = round(newIwu * 100) / 100;
+//                if (newIwu < 0.1) {
+//                    newIwu = 0.1;
+//                }
+//                std::cout << newIwu << " - ";
+//                while (simTime < runTimeSeg * (i+1)) {
+//                    Txint[idx] = newIwu;
+//                    simTime += newIwu;
+//                    idx++;
+//                }
+//		    }
 //		    int nbPacket = distribution(generator);
 //		    std::cout << nbPacket << " - " << round(runTimeSeg / nbPacket * 100) / 100 << " | ";
 //		    for (int j = 0; j < nbPacket; j++) {
 //		        Txint[idx] = round(runTimeSeg / nbPacket * 100) / 100;
 //		        idx++;
 //		    }
-
 		}
 		Txint[idx] = 10;
-		std::cout << std::endl;
+		std::cout << idx << std::endl;
 
 		nbPacketsSent = 0;
 		nbPacketsReceived = 0;
@@ -259,13 +272,13 @@ void NormalApplLayer::handleLowerMsg(cMessage * msg) {
 			if (firstPacketGeneration < 0)
 				firstPacketGeneration = m->getCreationTime();
 			lastPacketReception = m->getArrivalTime();
-			if(trace) {
+			if(debug && trace) {
 			  debugEV<< "Received a data packet from host[" << m->getSrcAddr()
 			  << "], latency=" << theLatency
 			  << ", collected " << hostsLatency(m->getSrcAddr()).
 			  getCount() << "mean is now: " << hostsLatency(m->getSrcAddr()).
 			  getMean() << endl;
-			} else {
+			} else if (debug) {
 				  debugEV<< "Received a data packet from host[" << m->getSrcAddr()
 				  << "], latency=" << theLatency << endl;
 			}

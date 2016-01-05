@@ -13,8 +13,8 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef Ricer3bLAYER_H_
-#define Ricer3bLAYER_H_
+#ifndef PWLAYER_H_
+#define PWLAYER_H_
 
 #include <string>
 #include <sstream>
@@ -28,46 +28,22 @@
 class MacPkt;
 
 /**
- * @brief Implementation of B-MAC (called also Berkeley MAC, Low Power
- * Listening or LPL).
- *
- * The protocol works as follows: each node is allowed to sleep for
- * slotDuration. After waking up, it first checks the channel for ongoing
- * transmissions.
- * If a transmission is catched (a beacon is received), the node stays awake
- * for at most slotDuration and waits for the actual data packet.
- * If a node wants to send a packet, it first sends beacons for at least
- * slotDuration, thus waking up all nodes in its transmission radius and
- * then sends out the data packet. If a mac-level ack is required, then the
- * receiver sends the ack immediately after receiving the packet (no beacons)
- * and the sender waits for some time more before going back to sleep.
- *
- * B-MAC is designed for low traffic, low power communication in WSN and is one
- * of the most widely used protocols (e.g. it is part of TinyOS).
- * The finite state machine of the protocol is given in the below figure:
- *
- * \image html RicerFSM.png "B-MAC Layer - finite state machine"
- *
- * A paper describing this implementation can be found at:
- * http://www.omnet-workshop.org/2011/uploads/slides/OMNeT_WS2011_S5_C1_Foerster.pdf
- *
- * @class Ricer3bLayer
+ * @class PWLayer
  * @ingroup macLayer
- * @author Anna Foerster
  *
  */
-class MIXIM_API Ricer3bLayer : public BaseMacLayer
+class MIXIM_API PWLayer : public BaseMacLayer
 {
   private:
 	/** @brief Copy constructor is not allowed.
 	 */
-	Ricer3bLayer(const Ricer3bLayer&);
+	PWLayer(const PWLayer&);
 	/** @brief Assignment operator is not allowed.
 	 */
-	Ricer3bLayer& operator=(const Ricer3bLayer&);
+	PWLayer& operator=(const PWLayer&);
 
   public:
-	Ricer3bLayer()
+	PWLayer()
 		: BaseMacLayer()
 		, macQueue()
 		, nbTxDataPackets(0), nbTxBeacons(0), nbRxDataPackets(0), nbRxBeacons(0)
@@ -88,7 +64,7 @@ class MIXIM_API Ricer3bLayer : public BaseMacLayer
 		, maxTxAttempts(0)
 		, stats(false)
 	{}
-	virtual ~Ricer3bLayer();
+	virtual ~PWLayer();
 
     /** @brief Initialization of the module and some variables*/
     virtual void initialize(int);
@@ -176,34 +152,34 @@ class MIXIM_API Ricer3bLayer : public BaseMacLayer
 	 * process **/
 	enum TYPES {
 		// packet types
-	    Ricer_DATA = 191,
-	    Ricer_BEACON,  //192
-		Ricer_BUZZ,     //193
-		Ricer_RELAYDATA,  //194
-		Ricer_ACK,          //195
+	    PW_DATA = 191,
+	    PW_BEACON,  //192
+		PW_BUZZ,     //193
+		PW_RELAYDATA,  //194
+		PW_ACK,          //195
 		// self message types
-		Ricer_RESEND_DATA,   //196
-		Ricer_ACK_TIMEOUT,   //197
-		Ricer_START_Ricer,    //198
-		Ricer_WAKE_UP,        //199
-		Ricer_SEND_ACK,       //200
-		Ricer_CCA_TIMEOUT,     //201
-		Ricer_ACK_TX_OVER,
-		Ricer_SEND_BEACON,     //203
-		Ricer_WAIT_OVER,
-		Ricer_DATA_TX_OVER,     //205
-		Ricer_DATA_TIMEOUT,
-		Ricer_RELAY_TIMEOUT,
-		Ricer_BUZZ_TIMEOUT,     //208
-		Ricer_SEND_BUZZ,       //209
-		Ricer_SEND_RELAYDATA
+		PW_RESEND_DATA,   //196
+		PW_ACK_TIMEOUT,   //197
+		PW_START,    //198
+		PW_WAKE_UP,        //199
+		PW_SEND_ACK,       //200
+		PW_CCA_TIMEOUT,     //201
+		PW_ACK_TX_OVER,
+		PW_SEND_BEACON,     //203
+		PW_WAIT_OVER,
+		PW_DATA_TX_OVER,     //205
+		PW_DATA_TIMEOUT,
+		PW_RELAY_TIMEOUT,
+		PW_BUZZ_TIMEOUT,     //208
+		PW_SEND_BUZZ,       //209
+		PW_SEND_RELAYDATA
 
 	};
 
 	// messages used in the FSM
 	cMessage *resend_data;
 	cMessage *ack_timeout;
-	cMessage *start_Ricer;
+	cMessage *start;
 	cMessage *wakeup;
 	cMessage *send_ack;
 	cMessage *cca_timeout;
@@ -266,7 +242,7 @@ class MIXIM_API Ricer3bLayer : public BaseMacLayer
 	bool stats;
 
 	/** @brief Possible colors of the node for animation */
-	enum Ricer_COLORS {
+	enum PW_COLORS {
 		GREEN = 1,
 		BLUE = 2,
 		RED = 3,
@@ -275,7 +251,7 @@ class MIXIM_API Ricer3bLayer : public BaseMacLayer
 	};
 
 	/** @brief Internal function to change the color of the node */
-	void changeDisplayColor(Ricer_COLORS color);
+	void changeDisplayColor(PW_COLORS color);
 
 	/** @brief Internal function to send the first packet in the queue */
 	void sendDataPacket();
@@ -294,4 +270,4 @@ class MIXIM_API Ricer3bLayer : public BaseMacLayer
 	bool addToQueue(cMessage * msg);
 };
 
-#endif /* RicerLAYER_H_ */
+#endif /* PWLAYER_H_ */

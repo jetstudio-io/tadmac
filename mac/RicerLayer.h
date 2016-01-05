@@ -249,6 +249,8 @@ class MIXIM_API RicerLayer : public BaseMacLayer
     double dataduration;
     double initialization;
     bool randInit;
+
+    int nbSlot;
     /** @brief Transmission power of the node */
     double txPower;
     /** @brief Use MAC level acks or not */

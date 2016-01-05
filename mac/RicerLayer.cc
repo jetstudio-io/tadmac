@@ -13,6 +13,12 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
 
+/**
+ * Version 1.0: point-to-point communication
+ * Version 2.0: multi-hop communication
+ * Version 3.0: multi-host (multi sender) communication
+ */
+
 #include "RicerLayer.h"
 
 #include <cassert>
@@ -46,6 +52,7 @@ void RicerLayer::initialize(int stage) {
         checkInterval = hasPar("checkInterval") ? par("checkInterval") : 0.005;
         dataduration = hasPar("dataduration") ? par("dataduration") : 0.01;
         initialization = hasPar("initialization") ? par("initialization") : 0.001;
+        nbSlot = hasPar("nbSlot") ? par("nbSlot") : 2;
         randInit = hasPar("randInit") ? par("randInit") : false;
         buzzduration = headerLength / bitrate;
 //        dataduration = 20 * headerLength / bitrate;
@@ -430,7 +437,8 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
                 delete msg;
                 return;
             }
-            cancelEvent(data_timeout);
+
+//            cancelEvent(data_timeout);
             nbRxDataPackets++;
             MacPkt* mac = static_cast<MacPkt *>(msg);
             const LAddress::L2Type& dest = mac->getDestAddr();

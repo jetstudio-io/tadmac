@@ -13,7 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#include "Ricer3bLayer.h"
+#include "PWLayer.h"
 
 #include <cassert>
 
@@ -25,12 +25,12 @@
 #include "MacPkt_m.h"
 #include "MacToPhyInterface.h"
 
-Define_Module(Ricer3bLayer)
+Define_Module(PWLayer)
 
 /**
- * Initialize method of Ricer3bLayer. Init all parameters, schedule timers.
+ * Initialize method of PWLayer. Init all parameters, schedule timers.
  */
-void Ricer3bLayer::initialize(int stage) {
+void PWLayer::initialize(int stage) {
     BaseMacLayer::initialize(stage);
 
     if (stage == 0) {
@@ -87,55 +87,55 @@ void Ricer3bLayer::initialize(int stage) {
     else if (stage == 1) {
 
         wakeup = new cMessage("wakeup");
-        wakeup->setKind(Ricer_WAKE_UP);
+        wakeup->setKind(PW_WAKE_UP);
 
         data_timeout = new cMessage("data_timeout");
-        data_timeout->setKind(Ricer_DATA_TIMEOUT);
+        data_timeout->setKind(PW_DATA_TIMEOUT);
         data_timeout->setSchedulingPriority(100);
 
         relay_timeout = new cMessage("relay_timeout");
-        relay_timeout->setKind(Ricer_RELAY_TIMEOUT);
+        relay_timeout->setKind(PW_RELAY_TIMEOUT);
 
         buzz_timeout = new cMessage("buzz_timeout");
-        buzz_timeout->setKind(Ricer_BUZZ_TIMEOUT);
+        buzz_timeout->setKind(PW_BUZZ_TIMEOUT);
 
         data_tx_over = new cMessage("data_tx_over");
-        data_tx_over->setKind(Ricer_DATA_TX_OVER);
+        data_tx_over->setKind(PW_DATA_TX_OVER);
 
         wait_over = new cMessage("wait_over");
-        wait_over->setKind(Ricer_WAIT_OVER);
+        wait_over->setKind(PW_WAIT_OVER);
 
         send_beacon = new cMessage("send_beacon");
-        send_beacon->setKind(Ricer_SEND_BEACON);
+        send_beacon->setKind(PW_SEND_BEACON);
 
         send_buzz = new cMessage("send_buzz");
-        send_buzz->setKind(Ricer_SEND_BUZZ);
+        send_buzz->setKind(PW_SEND_BUZZ);
 
         ack_tx_over = new cMessage("ack_tx_over");
-        ack_tx_over->setKind(Ricer_ACK_TX_OVER);
+        ack_tx_over->setKind(PW_ACK_TX_OVER);
 
         cca_timeout = new cMessage("cca_timeout");
-        cca_timeout->setKind(Ricer_CCA_TIMEOUT);
+        cca_timeout->setKind(PW_CCA_TIMEOUT);
         cca_timeout->setSchedulingPriority(100);
 
         send_ack = new cMessage("send_ack");
-        send_ack->setKind(Ricer_SEND_ACK);
+        send_ack->setKind(PW_SEND_ACK);
 
-        start_Ricer = new cMessage("start_Ricer");
-        start_Ricer->setKind(Ricer_START_Ricer);
+        start = new cMessage("start");
+        start->setKind(PW_START);
 
         ack_timeout = new cMessage("ack_timeout");
-        ack_timeout->setKind(Ricer_ACK_TIMEOUT);
+        ack_timeout->setKind(PW_ACK_TIMEOUT);
 
         resend_data = new cMessage("resend_data");
-        resend_data->setKind(Ricer_RESEND_DATA);
+        resend_data->setKind(PW_RESEND_DATA);
         resend_data->setSchedulingPriority(100);
 
-        scheduleAt(0.0, start_Ricer);
+        scheduleAt(0.0, start);
     }
 }
 
-Ricer3bLayer::~Ricer3bLayer() {
+PWLayer::~PWLayer() {
     cancelAndDelete(wakeup);
     cancelAndDelete(data_timeout);
     cancelAndDelete(data_tx_over);
@@ -144,7 +144,7 @@ Ricer3bLayer::~Ricer3bLayer() {
     cancelAndDelete(ack_tx_over);
     cancelAndDelete(cca_timeout);
     cancelAndDelete(send_ack);
-    cancelAndDelete(start_Ricer);
+    cancelAndDelete(start);
     cancelAndDelete(ack_timeout);
     cancelAndDelete(resend_data);
 
@@ -155,7 +155,7 @@ Ricer3bLayer::~Ricer3bLayer() {
     macQueue.clear();
 }
 
-void Ricer3bLayer::finish() {
+void PWLayer::finish() {
     BaseMacLayer::finish();
 
     // record stats
@@ -182,7 +182,7 @@ void Ricer3bLayer::finish() {
  * packet. Then initiate sending of the packet, if the node is sleeping. Do
  * nothing, if node is working.
  */
-void Ricer3bLayer::handleUpperMsg(cMessage *msg) {
+void PWLayer::handleUpperMsg(cMessage *msg) {
     bool pktAdded = addToQueue(msg);
     if (!pktAdded)
         return;
@@ -196,11 +196,11 @@ void Ricer3bLayer::handleUpperMsg(cMessage *msg) {
 /**
  * Send one short beacon packet immediately.
  */
-void Ricer3bLayer::sendBeacon() {
+void PWLayer::sendBeacon() {
     MacPkt* beacon = new MacPkt();
     beacon->setSrcAddr(myMacAddr);
     beacon->setDestAddr(LAddress::L2BROADCAST);
-    beacon->setKind(Ricer_BEACON);
+    beacon->setKind(PW_BEACON);
     beacon->setBitLength(headerLength);
 
     //attach signal and send down
@@ -208,11 +208,11 @@ void Ricer3bLayer::sendBeacon() {
     sendDown(beacon);
     nbTxBeacons++;
 }
-void Ricer3bLayer::sendRelayData() {
+void PWLayer::sendRelayData() {
     cPacket *m = dupdata->decapsulate();
     MacPkt *macPkt = new MacPkt(dupdata->getName());
     macPkt->setBitLength(headerLength);
-    macPkt->setKind(Ricer_RELAYDATA);
+    macPkt->setKind(PW_RELAYDATA);
     macPkt->setDestAddr(sinkAddr);
     macPkt->setSrcAddr(myMacAddr);
     macPkt->encapsulate(m);
@@ -221,11 +221,11 @@ void Ricer3bLayer::sendRelayData() {
     nbTxRelayData++;
 
 }
-void Ricer3bLayer::sendBuzz() {
+void PWLayer::sendBuzz() {
     MacPkt* buzz = new MacPkt();
     buzz->setSrcAddr(myMacAddr);
     buzz->setDestAddr(lastDataPktDestAddr);
-    buzz->setKind(Ricer_BUZZ);
+    buzz->setKind(PW_BUZZ);
     buzz->setBitLength(headerLength);
     buzz->setSequenceId(buzztx);
     //attach signal and send down
@@ -236,11 +236,11 @@ void Ricer3bLayer::sendBuzz() {
 /**
  * Send one short beacon packet immediately.
  */
-void Ricer3bLayer::sendMacAck() {
+void PWLayer::sendMacAck() {
     MacPkt* ack = new MacPkt();
     ack->setSrcAddr(myMacAddr);
     ack->setDestAddr(lastDataPktSrcAddr);
-    ack->setKind(Ricer_ACK);
+    ack->setKind(PW_ACK);
     ack->setBitLength(headerLength);
 
     //attach signal and send down
@@ -252,21 +252,21 @@ void Ricer3bLayer::sendMacAck() {
 
 /**
  * Handle own messages:
- * Ricer_WAKEUP: wake up the node, check the channel for some time.
- * Ricer_CHECK_CHANNEL: if the channel is free, check whether there is something
+ * PW_WAKEUP: wake up the node, check the channel for some time.
+ * PW_CHECK_CHANNEL: if the channel is free, check whether there is something
  * in the queue and switch the radio to TX. When switched to TX, the node will
  * start sending beacons for a full slot duration. If the channel is busy,
  * stay awake to receive message. Schedule a timeout to handle false alarms.
- * Ricer_SEND_BEACONS: sending of beacons over. Next time the data packet
+ * PW_SEND_BEACONS: sending of beacons over. Next time the data packet
  * will be send out (single one).
- * Ricer_TIMEOUT_DATA: timeout the node after a false busy channel alarm. Go
+ * PW_TIMEOUT_DATA: timeout the node after a false busy channel alarm. Go
  * back to sleep.
  */
-void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
+void PWLayer::handleSelfMsg(cMessage *msg) {
     switch (macState) {
     case INIT:
-        if (msg->getKind() == Ricer_START_Ricer) {
-            debugEV << "State INIT, message Ricer_START, new state SLEEP"
+        if (msg->getKind() == PW_START) {
+            debugEV << "State INIT, message PW_START, new state SLEEP"
                            << endl;
             changeDisplayColor(BLACK);
             phy->setRadioState(MiximRadio::SLEEP);
@@ -276,9 +276,9 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case SLEEP:
-        if (msg->getKind() == Ricer_WAKE_UP) {
+        if (msg->getKind() == PW_WAKE_UP) {
             debugEV
-                           << "State SLEEP, message Ricer_WAKEUP, new state CCA-----------------"
+                           << "State SLEEP, message PW_WAKEUP, new state CCA-----------------"
                            << numNodes << "----" << endl;
             scheduleAt(simTime() + buzzduration, cca_timeout);
             macState = CCA;
@@ -286,7 +286,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             changeDisplayColor(GREEN);
             return;
         }
-        if ((msg->getKind() == Ricer_DATA) || (msg->getKind() == 22100)) {
+        if ((msg->getKind() == PW_DATA) || (msg->getKind() == 22100)) {
             if (myMacAddr == sinkAddr) {
                 cancelEvent(wakeup);
                 phy->setRadioState(MiximRadio::RX);
@@ -297,12 +297,12 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             }
             return;
         }
-        if (msg->getKind() == Ricer_BUZZ) {
+        if (msg->getKind() == PW_BUZZ) {
             MacPkt* buzz = static_cast<MacPkt *>(msg);
             const LAddress::L2Type& dest = buzz->getDestAddr();
             if (dest == myMacAddr) {
                 debugEV
-                               << "State WAITBUZZ, message Ricer_BUZZ, new state WAITDATA"
+                               << "State WAITBUZZ, message PW_BUZZ, new state WAITDATA"
                                << endl;
                 cancelEvent(wakeup);
                 scheduleAt(simTime() + 2 * dataduration, data_timeout);
@@ -318,7 +318,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         break;
 
     case WAIT_BEACON:
-        if (msg->getKind() == Ricer_WAIT_OVER) {
+        if (msg->getKind() == PW_WAIT_OVER) {
             //                      delete macQueue.front();
             //                      macQueue.pop_front();
             // if something in the queue, wakeup soon.
@@ -330,7 +330,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             changeDisplayColor(BLACK);
             return;
         }
-        if (msg->getKind() == Ricer_BEACON) {
+        if (msg->getKind() == PW_BEACON) {
             nbRxBeacons++;
             if (macQueue.size() > 0) {
                 MacPkt *pkt = macQueue.front()->dup();
@@ -339,7 +339,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
                 const LAddress::L2Type& src = beacon->getSrcAddr();
                 if (src == lastDataPktDestAddr) {
                     debugEV
-                                   << "State WAITBEACON, message Ricer_BEACON received, new state"
+                                   << "State WAITBEACON, message PW_BEACON received, new state"
                                            " SEND_BUZZ" << endl;
                     buzztx = 1;
                     macState = SEND_BUZZ;
@@ -351,8 +351,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             }
             return;
         }
-        if ((msg->getKind() == Ricer_DATA) || (msg->getKind() == 22100)
-                || (msg->getKind() == Ricer_BUZZ)) {
+        if ((msg->getKind() == PW_DATA) || (msg->getKind() == 22100)
+                || (msg->getKind() == PW_BUZZ)) {
             cancelEvent(wait_over);
             scheduleAt(simTime() + slotDuration + dblrand() * checkInterval,
                     wakeup);
@@ -360,7 +360,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             phy->setRadioState(MiximRadio::SLEEP);
             changeDisplayColor(BLACK);
             debugEV
-                           << "State CCA, message Ricer_DATA_BROADCAST, new state WAIT_BEACON"
+                           << "State CCA, message PW_DATA_BROADCAST, new state WAIT_BEACON"
                            << endl;
             return;
         }
@@ -371,7 +371,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case CCA:
-        if (msg->getKind() == Ricer_CCA_TIMEOUT) {
+        if (msg->getKind() == PW_CCA_TIMEOUT) {
 //          if (phy->getChannelState().getRSSI()>2*1e-10)
 //            {
 //                if (macQueue.size() > 0)
@@ -401,7 +401,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
 //            }
             return;
         }
-        if (msg->getKind() == Ricer_BEACON) {
+        if (msg->getKind() == PW_BEACON) {
             nbRxBeacons++;
             if (macQueue.size() > 0) {
                 MacPkt *pkt = macQueue.front()->dup();
@@ -410,7 +410,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
                 const LAddress::L2Type& src = beacon->getSrcAddr();
                 if (src == lastDataPktDestAddr) {
                     debugEV
-                                   << "State CCA, message Ricer_BEACON received, new state"
+                                   << "State CCA, message PW_BEACON received, new state"
                                            " SEND_BUZZ" << endl;
                     buzztx = 1;
                     macState = SEND_BUZZ;
@@ -423,8 +423,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             }
             return;
         }
-        if ((msg->getKind() == 22100) || (msg->getKind() == Ricer_BUZZ)
-                || (msg->getKind() == Ricer_DATA)) {
+        if ((msg->getKind() == 22100) || (msg->getKind() == PW_BUZZ)
+                || (msg->getKind() == PW_DATA)) {
             cancelEvent(cca_timeout);
             scheduleAt(simTime() + slotDuration + dblrand() * checkInterval,
                     wakeup);
@@ -438,7 +438,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         break;
 
     case SEND_BUZZ:
-        if (msg->getKind() == Ricer_SEND_BUZZ) {
+        if (msg->getKind() == PW_SEND_BUZZ) {
             debugEV << "State SENDBUZZ, new state WAIT_RELAY" << endl;
             sendBuzz();
             macState = SEND_BUZZ;
@@ -448,12 +448,12 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case WAIT_BUZZ:
-        if (msg->getKind() == Ricer_BUZZ) {
+        if (msg->getKind() == PW_BUZZ) {
             MacPkt* buzz = static_cast<MacPkt *>(msg);
             const LAddress::L2Type& dest = buzz->getDestAddr();
             if (dest == myMacAddr) {
                 debugEV
-                               << "State WAITBUZZ, message Ricer_BUZZ, new state WAITDATA"
+                               << "State WAITBUZZ, message PW_BUZZ, new state WAITDATA"
                                << endl;
                 cancelEvent(buzz_timeout);
                 scheduleAt(simTime() + 4 * dataduration, data_timeout);
@@ -462,9 +462,9 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
                 delete msg;
             return;
         }
-        if (msg->getKind() == Ricer_BUZZ_TIMEOUT) {
+        if (msg->getKind() == PW_BUZZ_TIMEOUT) {
             debugEV
-                           << "State WAIT_BUZZ, message Ricer_BUZZ TIMEOUT, new state SLEEP"
+                           << "State WAIT_BUZZ, message PW_BUZZ TIMEOUT, new state SLEEP"
                            << endl;
             if (macQueue.size() > 0)
                 scheduleAt(simTime() + dblrand() * checkInterval, wakeup);
@@ -480,8 +480,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case SEND_BEACON:
-        if (msg->getKind() == Ricer_SEND_BEACON) {
-            debugEV << "State SEND_BEACON, message Ricer_SEND_BEACON, new"
+        if (msg->getKind() == PW_SEND_BEACON) {
+            debugEV << "State SEND_BEACON, message PW_SEND_BEACON, new"
                     " state WAIT_BUZZ" << endl;
             sendBeacon();
             macState = SEND_BEACON;
@@ -494,9 +494,9 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         break;
 
     case SEND_DATA:
-        if (msg->getKind() == Ricer_RESEND_DATA) {
+        if (msg->getKind() == PW_RESEND_DATA) {
             debugEV << "State SEND_DATA, message "
-                    " Ricer_SEND_DATA, new state WAIT_TX_DATA_OVER" << endl;
+                    " PW_SEND_DATA, new state WAIT_TX_DATA_OVER" << endl;
             // send the data packet
             sendDataPacket();
             flagack = 1;
@@ -508,8 +508,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         break;
 //
     case WAIT_TX_DATA_OVER:
-        if (msg->getKind() == Ricer_DATA_TX_OVER) {
-            debugEV << "State WAIT_TX_DATA_OVER, message Ricer_DATA_TX_OVER,"
+        if (msg->getKind() == PW_DATA_TX_OVER) {
+            debugEV << "State WAIT_TX_DATA_OVER, message PW_DATA_TX_OVER,"
                     " new state WAIT_ACK" << endl;
             macState = WAIT_ACK;
             phy->setRadioState(MiximRadio::RX);
@@ -522,10 +522,10 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case WAIT_ACK:
-        if (msg->getKind() == Ricer_ACK_TIMEOUT) {
+        if (msg->getKind() == PW_ACK_TIMEOUT) {
             if (txAttempts < maxTxAttempts) {
                 debugEV
-                               << "State WAIT_ACK, message Ricer_ACK_TIMEOUT, new state"
+                               << "State WAIT_ACK, message PW_ACK_TIMEOUT, new state"
                                        " SEND_DATA" << endl;
                 txAttempts++;
                 macState = SEND_DATA;
@@ -535,7 +535,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
 //				scheduleAt(simTime() + slotDuration+checkInterval, wait_over);
             } else {
                 debugEV
-                               << "State WAIT_ACK, message Ricer_ACK_TIMEOUT, new state"
+                               << "State WAIT_ACK, message PW_ACK_TIMEOUT, new state"
                                        " SLEEP" << endl;
                 if (flagack == 1) {
                     delete macQueue.front();
@@ -554,8 +554,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             }
             return;
         }
-        if (msg->getKind() == Ricer_ACK) {
-            debugEV << "State WAIT_ACK, message Ricer_ACK" << endl;
+        if (msg->getKind() == PW_ACK) {
+            debugEV << "State WAIT_ACK, message PW_ACK" << endl;
             MacPkt* mac = static_cast<MacPkt *>(msg);
             const LAddress::L2Type& src = mac->getSrcAddr();
             // the right ACK is received..
@@ -594,7 +594,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
 //	        delete msg;
 //	        return;
 //	    }
-        if (msg->getKind() == Ricer_DATA) {
+        if (msg->getKind() == PW_DATA) {
             cancelEvent(data_timeout);
             nbRxDataPackets++;
             MacPkt* mac = static_cast<MacPkt *>(msg);
@@ -602,7 +602,7 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             const LAddress::L2Type& src = mac->getSrcAddr();
             if (dest == myMacAddr) {
                 sendUp(decapsMsg(mac));
-                debugEV << "State WAIT_DATA, message Ricer_DATA, new state"
+                debugEV << "State WAIT_DATA, message PW_DATA, new state"
                         " SEND_ACK" << endl;
                 flagsendack = 1;
                 macState = SEND_ACK;
@@ -612,8 +612,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
             }
             return;
         }
-        if (msg->getKind() == Ricer_DATA_TIMEOUT) {
-            debugEV << "State WAIT_DATA, message Ricer_DATA_TIMEOUT, new state"
+        if (msg->getKind() == PW_DATA_TIMEOUT) {
+            debugEV << "State WAIT_DATA, message PW_DATA_TIMEOUT, new state"
                     " SLEEP" << endl;
             // if something in the queue, wakeup soon.
             if (macQueue.size() > 0)
@@ -629,8 +629,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case SEND_ACK:
-        if (msg->getKind() == Ricer_SEND_ACK) {
-            debugEV << "State SEND_ACK, message Ricer_SEND_ACK, new state"
+        if (msg->getKind() == PW_SEND_ACK) {
+            debugEV << "State SEND_ACK, message PW_SEND_ACK, new state"
                     " WAIT_ACK_TX" << endl;
             // send now the ack packet
             sendMacAck();
@@ -641,8 +641,8 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
         }
         break;
     case WAIT_ACK_TX:
-        if (msg->getKind() == Ricer_ACK_TX_OVER) {
-            debugEV << "State WAIT_ACK_TX, message Ricer_ACK_TX_OVER, new state"
+        if (msg->getKind() == PW_ACK_TX_OVER) {
+            debugEV << "State WAIT_ACK_TX, message PW_ACK_TX_OVER, new state"
                     " SLEEP" << endl;
             // ack sent, go to sleep now.
             // if something in the queue, wakeup soon.
@@ -665,20 +665,20 @@ void Ricer3bLayer::handleSelfMsg(cMessage *msg) {
 }
 
 /**
- * Handle Ricer beacons and received data packets.
+ * Handle PW beacons and received data packets.
  */
-void Ricer3bLayer::handleLowerMsg(cMessage *msg) {
+void PWLayer::handleLowerMsg(cMessage *msg) {
     // simply pass the massage as self message, to be processed by the FSM.
     handleSelfMsg(msg);
 
 }
 
-void Ricer3bLayer::sendDataPacket() {
+void PWLayer::sendDataPacket() {
     nbTxDataPackets++;
     MacPkt *pkt = macQueue.front()->dup();
     attachSignal(pkt);
     lastDataPktDestAddr = pkt->getDestAddr();
-    pkt->setKind(Ricer_DATA);
+    pkt->setKind(PW_DATA);
     sendDown(pkt);
 }
 
@@ -686,7 +686,7 @@ void Ricer3bLayer::sendDataPacket() {
  * Handle transmission over messages: either send another beacons or the data
  * packet itself.
  */
-void Ricer3bLayer::handleLowerControl(cMessage *msg) {
+void PWLayer::handleLowerControl(cMessage *msg) {
 //    if(msg->getKind()==22100)
 //        {
 //            nbPacketDrop++;
@@ -772,7 +772,7 @@ void Ricer3bLayer::handleLowerControl(cMessage *msg) {
  * Encapsulates the received network-layer packet into a MacPkt and set all
  * needed header fields.
  */
-bool Ricer3bLayer::addToQueue(cMessage *msg) {
+bool PWLayer::addToQueue(cMessage *msg) {
     if (macQueue.size() >= queueLength) {
         // queue is full, message has to be deleted
         debugEV << "New packet arrived, but queue is FULL, so new packet is"
@@ -808,7 +808,7 @@ bool Ricer3bLayer::addToQueue(cMessage *msg) {
     return true;
 }
 
-void Ricer3bLayer::attachSignal(MacPkt *macPkt) {
+void PWLayer::attachSignal(MacPkt *macPkt) {
     //calc signal duration
 
     simtime_t duration = macPkt->getBitLength() / bitrate;
@@ -821,7 +821,7 @@ void Ricer3bLayer::attachSignal(MacPkt *macPkt) {
  * Change the color of the node for animation purposes.
  */
 
-void Ricer3bLayer::changeDisplayColor(Ricer_COLORS color) {
+void PWLayer::changeDisplayColor(PW_COLORS color) {
     if (!animation)
         return;
     cDisplayString& dispStr = findHost()->getDisplayString();
@@ -843,7 +843,7 @@ void Ricer3bLayer::changeDisplayColor(Ricer_COLORS color) {
     //dispStr.parse("b=40,40,rect,yellow,yellow,2");
 }
 
-/*void Ricer3bLayer::changeMacState(States newState)
+/*void PWLayer::changeMacState(States newState)
  {
  switch (macState)
  {
