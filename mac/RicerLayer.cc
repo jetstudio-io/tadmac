@@ -20,6 +20,7 @@
  */
 
 #include "RicerLayer.h"
+#include "tool/tool.h"
 
 #include <cassert>
 
@@ -46,17 +47,16 @@ void RicerLayer::initialize(int stage) {
 
         queueLength = hasPar("queueLength") ? par("queueLength") : 10;
         animation = hasPar("animation") ? par("animation") : true;
-        slotDuration = hasPar("slotDuration") ? par("slotDuration") : 0.09;
-        bitrate = hasPar("bitrate") ? par("bitrate") : 15360;
-        headerLength = hasPar("headerLength") ? par("headerLength") : 10;
-        checkInterval = hasPar("checkInterval") ? par("checkInterval") : 0.005;
-        dataduration = hasPar("dataduration") ? par("dataduration") : 0.01;
-        initialization = hasPar("initialization") ? par("initialization") : 0.001;
-        nbSlot = hasPar("nbSlot") ? par("nbSlot") : 2;
-        randInit = hasPar("randInit") ? par("randInit") : false;
-        buzzduration = headerLength / bitrate;
-//        dataduration = 20 * headerLength / bitrate;
-        debugEV << "headerLength: " << headerLength << ", bitrate: " << bitrate << endl;
+        bitrate = hasPar("bitrate") ? par("bitrate") : 250000;
+        iwu = hasPar("iwu") ? par("iwu") : 0.05;
+
+        // number of data slot: config par parameter in Destination or Relay, get by node index in Sources
+        if (role == NODE_RECEIVER || role == NODE_TRANSMITER) {
+            nbSlot = hasPar("nbSlot") ? par("nbSlot") : 2;
+        } else {
+            // do not count RECEIVER & RELAY index
+            nbSlot = getNode()->getIndex() - 2;
+        }
 
         txPower = hasPar("txPower") ? par("txPower") : 1.0;
         useMacAcks = hasPar("useMACAcks") ? par("useMACAcks") : false;
@@ -70,15 +70,14 @@ void RicerLayer::initialize(int stage) {
         nbRecvdAcks = 0;
         nbDroppedDataPackets = 0;
         nbTxAcks = 0;
-        nbPacketDrop = 0;
         nbTxRelayData = 0;
-        nbRxRelayData = 0;
         nbPacketError = 0;
+        idleVec.setName("idle");
 
         txAttempts = 0;
         lastDataPktDestAddr = LAddress::L2BROADCAST;
         lastDataPktSrcAddr = LAddress::L2BROADCAST;
-        relayAddr.setAddress(hasPar("relayAddr") ? par("relayAddr") : "ff:ff:ff:ff:ff:ff");
+        forwardAddr.setAddress(hasPar("forwardAddr") ? par("forwardAddr") : "ff:ff:ff:ff:ff:ff");
 
         macState = INIT;
 
@@ -86,7 +85,10 @@ void RicerLayer::initialize(int stage) {
         droppedPacket.setReason(DroppedPacket::NONE);
         nicId = getNic()->getId();
         WATCH(macState);
-        std::cout << txPower << std::endl;
+
+        // init some timer infomations
+        checkInterval = PKG_WB_SIZE * 8 / bitrate;
+        slotDuration = (PKG_WB_SIZE + PKG_DATA_SIZE + PKG_WB_SIZE + PKG_ACK_SIZE) * 8 / bitrate;
     }
 
     else if (stage == 1) {
@@ -107,8 +109,8 @@ void RicerLayer::initialize(int stage) {
         beacon_tx_over = new cMessage("beacon_tx_over");
         beacon_tx_over->setKind(Ricer_BEACON_TX_OVER);
 
-        wait_over = new cMessage("wait_over");
-        wait_over->setKind(Ricer_WAIT_OVER);
+        beacon_timeout = new cMessage("beacon_timeout");
+        beacon_timeout->setKind(Ricer_BEACON_TIMEOUT);
 
         ack_tx_over = new cMessage("ack_tx_over");
         ack_tx_over->setKind(Ricer_ACK_TX_OVER);
@@ -120,9 +122,10 @@ void RicerLayer::initialize(int stage) {
         ack_timeout = new cMessage("ack_timeout");
         ack_timeout->setKind(Ricer_ACK_TIMEOUT);
 
-        start_Ricer = new cMessage("start_Ricer");
-        start_Ricer->setKind(Ricer_START_Ricer);
-        scheduleAt(0.0, start_Ricer);
+        start = new cMessage("Ricer_START");
+        start->setKind(Ricer_START);
+
+        scheduleAt(0.0, start);
     }
 }
 
@@ -132,11 +135,11 @@ RicerLayer::~RicerLayer() {
     cancelAndDelete(data_timeout);
     cancelAndDelete(data_tx_over);
     cancelAndDelete(beacon_tx_over);
-    cancelAndDelete(wait_over);
+    cancelAndDelete(beacon_timeout);
     cancelAndDelete(ack_tx_over);
     cancelAndDelete(cca_timeout);
     cancelAndDelete(ack_timeout);
-    cancelAndDelete(start_Ricer);
+    cancelAndDelete(start);
 
     MacQueue::iterator it;
     for (it = macQueue.begin(); it != macQueue.end(); ++it) {
@@ -150,9 +153,7 @@ void RicerLayer::finish() {
 
     // record stats
     if (stats) {
-        recordScalar("nbRxRelayData", nbRxRelayData);
         recordScalar("nbTxRelayData", nbTxRelayData);
-        recordScalar("nbPacketDrop", nbPacketDrop);
         recordScalar("nbTxDataPackets", nbTxDataPackets);
         recordScalar("nbTxBeacons", nbTxBeacons);
         recordScalar("nbRxDataPackets", nbRxDataPackets);
@@ -162,9 +163,6 @@ void RicerLayer::finish() {
         recordScalar("nbTxAcks", nbTxAcks);
         recordScalar("nbDroppedDataPackets", nbDroppedDataPackets);
         recordScalar("nbPacketError", nbPacketError);
-        //recordScalar("timeSleep", timeSleep);
-        //recordScalar("timeRX", timeRX);
-        //recordScalar("timeTX", timeTX);
     }
 }
 
@@ -174,11 +172,11 @@ void RicerLayer::finish() {
  * nothing, if node is working.
  */
 void RicerLayer::handleUpperMsg(cMessage *msg) {
-    bool pktAdded = addToQueue(msg);
-    if (!pktAdded)
-        return;
+    // store packet to queue
+    addToQueue(msg);
     // force wakeup now
     if (macState == SLEEP) {
+        // if scheduled to wakeup & send WB - cancel this event
         if (wakeup->isScheduled()) {
             cancelEvent(wakeup);
         }
@@ -198,7 +196,7 @@ void RicerLayer::sendBeacon() {
     beacon->setDestAddr(LAddress::L2BROADCAST);
     beacon->setKind(Ricer_BEACON);
     beacon->setName("Beacon");
-    beacon->setBitLength(headerLength);
+    beacon->setBitLength(PKG_WB_SIZE * 8);
 
     //attach signal and send down
     attachSignal(beacon);
@@ -214,13 +212,12 @@ void RicerLayer::sendMacAck() {
     ack->setDestAddr(lastDataPktSrcAddr);
     ack->setKind(Ricer_ACK);
     ack->setName("ACK");
-    ack->setBitLength(headerLength);
+    ack->setBitLength(PKG_ACK_SIZE * 8);
 
     //attach signal and send down
     attachSignal(ack);
     sendDown(ack);
     nbTxAcks++;
-    //endSimulation();
 }
 
 /**
@@ -238,7 +235,7 @@ void RicerLayer::sendMacAck() {
 void RicerLayer::handleSelfMsg(cMessage *msg) {
     switch (macState) {
     case INIT:
-        if (msg->getKind() == Ricer_START_Ricer) {
+        if (msg->getKind() == Ricer_START) {
             debugEV << "State INIT, message Ricer_START, new state SLEEP"
                            << endl;
             changeDisplayColor(BLACK);
@@ -246,13 +243,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
             macState = SLEEP;
             // if node is receiver or transmitter - wake up periodically to send beacon
             if (role == NODE_RECEIVER || role == NODE_TRANSMITER) {
-                if (randInit) {
-                    double init = dblrand() * slotDuration;
-                    std::cout<< init << std::endl;
-                    scheduleAt(simTime() + init + initialization, wakeup);
-                } else {
-                    scheduleAt(simTime() + initialization, wakeup);
-                }
+                scheduleAt(simTime(), wakeup);
             }
             return;
         }
@@ -261,7 +252,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         // wake up periodically to receive data
         if (msg->getKind() == Ricer_WAKE_UP) {
             debugEV << "State SLEEP, message Ricer_WAKEUP, new state CCA" << endl;
-            scheduleAt(simTime() + buzzduration, cca_timeout);
+            scheduleAt(simTime() + checkInterval, cca_timeout);
             macState = CCA;
             phy->setRadioState(MiximRadio::RX);
             changeDisplayColor(GREEN);
@@ -272,19 +263,21 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         if (msg->getKind() == Ricer_WAKE_UP_DATA) {
             debugEV << "State SLEEP, message Ricer_WAKE_UP_DATA, new state WAIT_BEACON" << endl;
             macState = WAIT_BEACON;
-            scheduleAt(simTime() + slotDuration, wait_over);
+            scheduleAt(simTime() + slotDuration, beacon_timeout);
 
             phy->setRadioState(MiximRadio::RX);
             changeDisplayColor(GREEN);
+            // store wakeupTime to calculate idle
+            wakeupTime = simTime().dbl();
             return;
         }
         break;
 
     case WAIT_BEACON:
         // if didn't receive beacon
-        if (msg->getKind() == Ricer_WAIT_OVER) {
+        if (msg->getKind() == Ricer_BEACON_TIMEOUT) {
             // if something in the queue, wakeup soon.
-            debugEV << "State WAIT_BEACON, message WAIT_OVER, new state SLEEP" << endl;
+            debugEV << "State WAIT_BEACON, message BEACON_TIMEOUT, new state SLEEP" << endl;
             macState = SLEEP;
             scheduleAt(simTime() + dblrand() * slotDuration, wakeup_data);
 
@@ -308,7 +301,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
                 MacPkt* beacon = static_cast<MacPkt *>(msg);
                 const LAddress::L2Type& src = beacon->getSrcAddr();
                 // send data packet when receive beacon from only destination or relay host.
-                if (src == lastDataPktDestAddr || src == relayAddr) {
+                if (src == lastDataPktDestAddr || src == forwardAddr) {
                     debugEV << "State WAITBEACON, message Ricer_BEACON received, new state SEND_DATA" << endl;
                     macState = SEND_DATA;
 
@@ -316,7 +309,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
                     changeDisplayColor(YELLOW);
 
                     // cancel wait over event
-                    cancelEvent(wait_over);
+                    cancelEvent(beacon_timeout);
                     txAttempts = 1;
                 }
                 beacon = NULL;
@@ -329,6 +322,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
     case CCA:
         if (msg->getKind() == Ricer_CCA_TIMEOUT) {
             debugEV << "State CCA, message CCA_TIMEOUT new state SEND_BEACON" << endl;
+            // Check if channel is free
             if (phy->getChannelState().isIdle()) {
                 macState = SEND_BEACON;
                 phy->setRadioState(MiximRadio::TX);
@@ -336,7 +330,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
                 return;
             } else if(ccaAttempts < 3) {
                 ccaAttempts++;
-                scheduleAt(simTime() + buzzduration, cca_timeout);
+                scheduleAt(simTime() + checkInterval, cca_timeout);
             } else {
                 debugEV << "State CCA 3 time attemps ccs, new state SLEEP" << endl;
                 while (wakeupTime + slotDuration < simTime().dbl()) {
@@ -355,7 +349,8 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
             macState = WAIT_DATA;
             phy->setRadioState(MiximRadio::RX);
             changeDisplayColor(GREEN);
-            scheduleAt(simTime() + dataduration, data_timeout);
+            // stay awake in nbSlot of slotDuration to wait data from receiver
+            scheduleAt(simTime() + slotDuration * nbSlot, data_timeout);
             return;
         }
         break;
@@ -433,27 +428,34 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         break;
     case WAIT_DATA:
         if (msg->getKind() == Ricer_DATA) {
+            // if receive data packet but this packet is error (channel noisy or conflict) - do nothing, wait other packet
             if (packetError) {
                 delete msg;
                 return;
             }
 
-//            cancelEvent(data_timeout);
-            nbRxDataPackets++;
-            MacPkt* mac = static_cast<MacPkt *>(msg);
+            dataPkt_prt_t mac = static_cast<dataPkt_prt_t>(msg);
             const LAddress::L2Type& dest = mac->getDestAddr();
             const LAddress::L2Type& src = mac->getSrcAddr();
-            if (dest == myMacAddr) {
-                sendUp(decapsMsg(mac));
-                lastDataPktSrcAddr = src;
-            } else {
-                // if can push this packet to queue
-                if (macQueue.size() < queueLength) {
-                    macQueue.push_back(mac);
+            lastDataPktSrcAddr = src;
+
+            // if current node is destination
+            if (role == NODE_RECEIVER) {
+                if (mac->getPacketsArraySize() > 0) {
+                    nbRxDataPackets += mac->getPacketsArraySize();
+                    for (int i = 0; i < mac->getPacketsArraySize(); i++) {
+                        DATAPkt tmp = mac->getPackets(i);
+                        sendUp(decapsMsg(&tmp));
+                    }
                 } else {
-                    delete msg;
+                    nbRxDataPackets++;
+                    sendUp(decapsMsg(mac));
                 }
+            } else {
+                nbRxDataPackets++;
+                macQueue.push_back(mac);
             }
+            delete msg;
             debugEV << "State WAIT_DATA, message Ricer_DATA, new state SEND_ACK" << endl;
             macState = SEND_ACK;
             phy->setRadioState(MiximRadio::TX);
@@ -463,10 +465,10 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         }
         if (msg->getKind() == Ricer_DATA_TIMEOUT) {
             debugEV << "State WAIT_DATA, message Ricer_DATA_TIMEOUT, new state SLEEP" << endl;
-            while (wakeupTime + slotDuration < simTime().dbl()) {
-                wakeupTime+= slotDuration;
+            while (wakeupTime + iwu < simTime().dbl()) {
+                wakeupTime+= iwu;
             }
-            scheduleAt(wakeupTime + slotDuration, wakeup);
+            scheduleAt(wakeupTime + iwu, wakeup);
             macState = SLEEP;
             phy->setRadioState(MiximRadio::SLEEP);
             changeDisplayColor(BLACK);
@@ -495,7 +497,7 @@ void RicerLayer::handleSelfMsg(cMessage *msg) {
         break;
     }
     debugEV << "Event type: " << msg->getKind() << " in state " << macState << " MiximRadio state " << phy->getRadioState() << endl;
-    if (msg->getKind() == Ricer_BEACON || msg->getKind() == Ricer_DATA || msg->getKind() == Ricer_ACK) {
+    if (msg->getKind() == Ricer_BEACON || msg->getKind() == Ricer_DATA || msg->getKind() == Ricer_ACK || msg->getKind() == Ricer_DATA_AGG) {
         delete msg;
     }
 }
@@ -510,7 +512,25 @@ void RicerLayer::handleLowerMsg(cMessage *msg) {
 
 void RicerLayer::sendDataPacket() {
     nbTxDataPackets++;
-    MacPkt *pkt = macQueue.front()->dup();
+    DATAPkt *pkt = new DATAPkt();
+    // if relay node
+    if (role == NODE_TRANSMITER) {
+        pkt->setSrcAddr(myMacAddr);
+        pkt->setDestAddr(forwardAddr);
+        int nbPkt = macQueue.size();
+        pkt->setPacketsArraySize(nbPkt);
+        int idx = 0;
+        // Aggregate all packets in queue & send to destination
+        while (macQueue.front()) {
+            dataPkt_prt_t tmp = macQueue.front()->dup();
+            pkt->setPackets(idx, *tmp);
+            // remove data packet in queue
+            delete macQueue.front();
+            macQueue.pop_front();
+        }
+    } else {
+        pkt = macQueue.front()->dup();
+    }
     attachSignal(pkt);
     lastDataPktDestAddr = pkt->getDestAddr();
     pkt->setKind(Ricer_DATA);
@@ -536,23 +556,17 @@ void RicerLayer::handleLowerControl(cMessage *msg) {
         }
         packetError = false;
     }
-    // MiximRadio switching (to RX or TX) ir over, ignore switching to SLEEP.
+    // MiximRadio switching (to RX or TX) is over, ignore switching to SLEEP.
     else if (msg->getKind() == MacToPhyInterface::RADIO_SWITCHING_OVER) {
-        // we just switched to TX after CCA, so simply send the first
-        // sendPremable self message
-        if ((macState == SEND_BEACON)
-                && (phy->getRadioState() == MiximRadio::TX)) {
+        if ((macState == SEND_BEACON) && (phy->getRadioState() == MiximRadio::TX)) {
             macState = WAIT_TX_BEACON_OVER;
             sendBeacon();
         }
-        if ((macState == SEND_ACK)
-                && (phy->getRadioState() == MiximRadio::TX)) {
+        if ((macState == SEND_ACK) && (phy->getRadioState() == MiximRadio::TX)) {
             macState = WAIT_TX_ACK_OVER;
             sendMacAck();
         }
-        // Switching radio to send data
-        if ((macState == SEND_DATA)
-                && (phy->getRadioState() == MiximRadio::TX)) {
+        if ((macState == SEND_DATA) && (phy->getRadioState() == MiximRadio::TX)) {
             macState = WAIT_TX_DATA_OVER;
             sendDataPacket();
         }
@@ -577,19 +591,17 @@ void RicerLayer::handleLowerControl(cMessage *msg) {
 bool RicerLayer::addToQueue(cMessage *msg) {
     if (macQueue.size() >= queueLength) {
         // queue is full, message has to be deleted
-        debugEV << "New packet arrived, but queue is FULL, so new packet is"
-                " deleted\n";
+        debugEV << "New packet arrived, but queue is FULL, so new packet is deleted\n";
         msg->setName("MAC ERROR");
         msg->setKind(PACKET_DROPPED);
         sendControlUp(msg);
         droppedPacket.setReason(DroppedPacket::QUEUE);
         emit(BaseLayer::catDroppedPacketSignal, &droppedPacket);
         nbDroppedDataPackets++;
-
         return false;
     }
 
-    MacPkt *macPkt = new MacPkt(msg->getName());
+    DATAPkt *macPkt = new DATAPkt(msg->getName());
     macPkt->setBitLength(headerLength);
     cObject * const cInfo = msg->removeControlInfo();
     //EV<<"CSMA received a message from upper layer, name is "

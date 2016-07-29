@@ -48,6 +48,7 @@ simple NormalApplLayer like IBaseApplLayer {
         bool notAffectedByHostState = default(true);
         int nbChange = default(0);
         double runTime @unit(s) = default(1000s);
+        string dataInput = default("");     // file data input - use the pre-generate data traffic
     gates:
         input lowerLayerIn; // from network layer
         input lowerControlIn;

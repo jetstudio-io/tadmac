@@ -53,26 +53,14 @@ simple RicerLayer extends BaseMacLayer
         // 1 - sender (default)
         // 2 - transmiter : will be implemented later
         int role = default(1);
+        // wakeup interval of destination & relay - default 50ms
+        double iwu @unit(s) = default(0.05s);
         
-        string relayAddr = default("ff:ff:ff:ff:ff:ff");
         string forwardAddr = default("ff:ff:ff:ff:ff:ff");
         
         // how many slot after WB
         int nbSlot = default(2);
         
-		// how long is one slot?
-		double slotDuration @unit(s) = default(0.09s);
-		
-		// how long is the check interval (CCA)?
-		double checkInterval @unit(s) = default(0.005s);
-		
-		// how long is the waiting data?
-        double dataduration @unit(s) = default(0.01s);
-        
-        // how long is the initialization
-        double initialization @unit(s) = default(0.001s);
-        bool randInit = default (false);
-		
 		// size of the MAC queue (maximum number of packets in Tx buffer)
         double queueLength = default(20);
         

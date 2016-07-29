@@ -126,10 +126,6 @@ class MIXIM_API NormalApplLayer : public BaseLayer
         static const int time1 = 200;
         static const int time2 = 400;
         static const int time3 = 600;
-        static const double rate1 = 1;
-        static const double rate2 = 2;
-        static const double rate3 = 0.5;
-        static const double rate4 = 1.25;
 
     protected:
         // gates

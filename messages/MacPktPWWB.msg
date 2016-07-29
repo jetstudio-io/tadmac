@@ -13,7 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
 //**************************************************************************
-// * file:        MacPktFTA.msg
+// * file:        MacPktPWWB.msg
 // *
 // * author:      Nguyen Van Thiep
 // *
@@ -29,7 +29,7 @@
 // *              in the top level directory
 // **************************************************************************
 // * part of:     Fast Traffic Adaptive (FTA) Mac protocol
-// * description: - Definie Mac package for FTA protocol
+// * description: - Definie WB Mac package for PW-MAC protocol
 // **************************************************************************/
 
 cplusplus {{
@@ -40,16 +40,13 @@ cplusplus {{
 class LAddress::L2Type extends void;
 class MacPkt;
 
-packet MacPktFTA extends MacPkt
+packet MacPktPWWB extends MacPkt
 {
     LAddress::L2Type destAddr; // destination mac address
     LAddress::L2Type srcAddr;  // source mac address
-    LAddress::L2Type originalSrcAddr;  // original destination mac address
 //    long             sequenceId; // Sequence Number to detect duplicate messages
-	int           idle;  // The idle time that this node waited WB from receiver before send data
-	int           wbMiss;  // The number wake up without receipt WB
-	int           nodeId;  // The node id - easy to calculate the Iwu
-	int           iwu;    // wake up interval of sender
-	int           numberPacket;
-	MacPktFTA     packets[];           
+    // parameter for next wakeup
+	int           a;
+	int           c;
+	int           m;           
 }

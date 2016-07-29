@@ -64,6 +64,7 @@ void FTAMacLayer::initialize(int stage) {
         sysClockFactor = hasPar("sysClockFactor") ? par("sysClockFactor") : 75;
         alpha = hasPar("alpha") ? par("alpha") : 0.5;
         numberSender = hasPar("numberSender") ? par("numberSender") : 1;
+        dataLen = hasPar("dataLen") ? par("dataLen") : 13;
 
         queueLength = hasPar("queueLength") ? par("queueLength") : 8;
         animation = hasPar("animation") ? par("animation") : true;
@@ -75,7 +76,7 @@ void FTAMacLayer::initialize(int stage) {
 
         idxOffset = hasPar("idxOffset") ? par("idxOffset") : 0;
 
-        waitCCA = headerLength / bitrate;
+        waitCCA = PKG_DATA_SIZE / bitrate;
 
         stats = par("stats");
         nbTxDataPackets = 0;
@@ -335,8 +336,9 @@ bool FTAMacLayer::addToQueue(cMessage * msg) {
         return false;
     }
 
-    macpkt_ptr_t macPkt = new MacPkt(msg->getName());
-    macPkt->setBitLength(headerLength);
+    macpktfta_ptr_t macPkt = new MacPktFTA(msg->getName());
+    // set data length in bits - 9 bytes for header & 2 bytes for checksum
+    macPkt->setBitLength((dataLen + 11) * 8);
     cObject *const cInfo = msg->removeControlInfo();
     macPkt->setDestAddr(getUpperDestinationFromControlInfo(cInfo));
     delete cInfo;
@@ -897,19 +899,19 @@ void FTAMacLayer::handleSelfMsgTransmitter(cMessage *msg) {
             }
             // duration the WAIT_WB, received the WB message -> change to CCA state & schedule the timeout event
             if (msg->getKind() == WB) {
-                macpktwb_prt_t mac  = static_cast<macpktwb_prt_t>(msg);
-                const LAddress::L2Type& src = mac->getSrcAddr();
-                if (src == backHost) {
-                    macState = CCA_DATA;
-                    scheduleAt(simTime() + waitCCA, ccaDATATimeout);
-                    // log the time wait for WB
-                    timeWaitWB = simTime().dbl() - startWaitWB;
-                }
-                mac = NULL;
-                // Drop this message
-                delete msg;
-                msg = NULL;
-                return;
+//                macpktwb_prt_t mac  = static_cast<mac>(msg);
+//                const LAddress::L2Type& src = mac->getSrcAddr();
+//                if (src == backHost) {
+//                    macState = CCA_DATA;
+//                    scheduleAt(simTime() + waitCCA, ccaDATATimeout);
+//                    // log the time wait for WB
+//                    timeWaitWB = simTime().dbl() - startWaitWB;
+//                }
+//                mac = NULL;
+//                // Drop this message
+//                delete msg;
+//                msg = NULL;
+//                return;
             }
             break;
         case CCA_DATA:
@@ -943,21 +945,6 @@ void FTAMacLayer::handleSelfMsgTransmitter(cMessage *msg) {
                 nbMissedAcks++;
                 //@TODO: resend data
                 // if the number resend data is not reach max time
-//                if (txAttempts < maxTxAttempts) {
-//                    macState = WAIT_WB;
-//                    changeMACState();
-//                    txAttempts++;
-//
-//                    // schedule the event wait WB timeout
-//                    scheduleAt(simTime() + waitWB, rxWBTimeout);
-//                    // store the moment to wait WB
-//                    timeWaitWB = simTime();
-//                    nbMissedAcks++;
-//                } else {
-//                    macState = SLEEP;
-//                    changeMACState();
-//                    nbMissedAcks++;
-//                }
                 return;
             }
             // received ACK
@@ -1252,7 +1239,8 @@ void FTAMacLayer::sendWB() {
     wb->setDestAddr(LAddress::L2BROADCAST);
     wb->setName("WB");
     wb->setKind(WB);
-    wb->setBitLength(headerLength);
+    // WB have 7 bytes length
+    wb->setBitLength(7 * 8);
 
     //attach signal and send down
     attachSignal(wb);
@@ -1270,7 +1258,8 @@ void FTAMacLayer::sendMacAck() {
     ack->setDestAddr(macQueue.front()->getSrcAddr());
     ack->setName("ACK");
     ack->setKind(ACK);
-    ack->setBitLength(headerLength);
+    // ACK have 11 bytes length
+    ack->setBitLength(11 * 8);
 
     //attach signal and send down
     attachSignal(ack);
@@ -1294,7 +1283,8 @@ void FTAMacLayer::sendDataPacket() {
     lastDataPktDestAddr = pkt->getDestAddr();
     pkt->setName("DATA");
     pkt->setKind(DATA);
-    pkt->setByteLength(16);
+    //DATA have 9 bytes of header, 2 bytes for checksum & data payload >= 2 bytes - default 13 bytes (total 24 bytes)
+    pkt->setByteLength(dataLen + 11);
     pkt->setIdle(int(timeWaitWB * 1000));
     pkt->setWbMiss(wbMiss);
     pkt->setNodeId(nodeIdx);

@@ -24,38 +24,12 @@
 #include "MiXiMDefs.h"
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
+#include "DATAPkt_m.h"
 
 class MacPkt;
+class DATAPkt;
 
-/**
- * @brief Implementation of B-MAC (called also Berkeley MAC, Low Power
- * Listening or LPL).
- *
- * The protocol works as follows: each node is allowed to sleep for
- * slotDuration. After waking up, it first checks the channel for ongoing
- * transmissions.
- * If a transmission is catched (a beacon is received), the node stays awake
- * for at most slotDuration and waits for the actual data packet.
- * If a node wants to send a packet, it first sends beacons for at least
- * slotDuration, thus waking up all nodes in its transmission radius and
- * then sends out the data packet. If a mac-level ack is required, then the
- * receiver sends the ack immediately after receiving the packet (no beacons)
- * and the sender waits for some time more before going back to sleep.
- *
- * B-MAC is designed for low traffic, low power communication in WSN and is one
- * of the most widely used protocols (e.g. it is part of TinyOS).
- * The finite state machine of the protocol is given in the below figure:
- *
- * \image html RicerFSM.png "B-MAC Layer - finite state machine"
- *
- * A paper describing this implementation can be found at:
- * http://www.omnet-workshop.org/2011/uploads/slides/OMNeT_WS2011_S5_C1_Foerster.pdf
- *
- * @class RicerLayer
- * @ingroup macLayer
- * @author Anna Foerster
- *
- */
+
 class MIXIM_API RicerLayer : public BaseMacLayer
 {
   private:
@@ -71,23 +45,24 @@ class MIXIM_API RicerLayer : public BaseMacLayer
         : BaseMacLayer()
         , macQueue()
         , nbTxDataPackets(0), nbTxBeacons(0), nbRxDataPackets(0), nbRxBeacons(0)
-        , nbMissedAcks(0), nbRecvdAcks(0), nbDroppedDataPackets(0), nbTxAcks(0)
+        , nbMissedAcks(0), nbRecvdAcks(0), nbDroppedDataPackets(0), nbTxAcks(0), nbTxRelayData(0)
         , macState(INIT)
         , wakeup(NULL), wakeup_data(NULL), data_timeout(NULL), data_tx_over(NULL)
-        , beacon_tx_over(NULL), wait_over(NULL), ack_tx_over(NULL), cca_timeout(NULL)
-        , ack_timeout(NULL), start_Ricer(NULL)
+        , beacon_tx_over(NULL), beacon_timeout(NULL), ack_tx_over(NULL), cca_timeout(NULL)
+        , ack_timeout(NULL), start(NULL)
         , lastDataPktSrcAddr()
         , lastDataPktDestAddr()
-        , relayAddr()
+        , forwardAddr()
         , txAttempts(0)
         , droppedPacket()
         , nicId(-1)
         , queueLength(0)
         , animation(false)
-        , slotDuration(0), bitrate(0), headerLength(0), checkInterval(0), txPower(1.0)
+        , slotDuration(0), bitrate(0), headerLength(0), checkInterval(0), iwu(0), txPower(1.0)
         , useMacAcks(0)
         , maxTxAttempts(0)
         , stats(false)
+        , wakeupTime(0)
     {}
     virtual ~RicerLayer();
 
@@ -110,7 +85,8 @@ class MIXIM_API RicerLayer : public BaseMacLayer
     virtual void handleLowerControl(cMessage *msg);
 
   protected:
-    typedef std::list<MacPkt*> MacQueue;
+    typedef DATAPkt* dataPkt_prt_t;
+    typedef std::list<dataPkt_prt_t> MacQueue;
 
     /** @brief A queue to store packets from upper layer in case another
     packet is still waiting for transmission.*/
@@ -126,9 +102,10 @@ class MIXIM_API RicerLayer : public BaseMacLayer
     long nbRecvdAcks;
     long nbDroppedDataPackets;
     long nbTxAcks;
-    long nbPacketDrop;
     long nbTxRelayData;
-    long nbRxRelayData;
+
+    /** @brief Ouput vector tracking the idle listening interval.*/
+    cOutVector idleVec;
 
     int ccaAttempts;
     /*@}*/
@@ -182,40 +159,39 @@ class MIXIM_API RicerLayer : public BaseMacLayer
      * process **/
     enum TYPES {
         // packet types
-        Ricer_DATA = 191,
-        Ricer_BEACON,       //192
-        Ricer_ACK,          //194
+        Ricer_DATA = 190,
+        Ricer_BEACON,       //191
+        Ricer_ACK,          //192
+        Ricer_DATA_AGG,     //193
         // self message types
-        Ricer_WAKE_UP = 200,    //200
-        Ricer_WAKE_UP_DATA,     //201
-        Ricer_CCA_TIMEOUT,      //202
-        Ricer_DATA_TX_OVER,     //205
-        Ricer_BEACON_TX_OVER,   //203
-        Ricer_ACK_TIMEOUT,      //197
-        Ricer_ACK_TX_OVER,
-        Ricer_WAIT_OVER,
-        Ricer_DATA_TIMEOUT,
-        Ricer_START_Ricer,      //198
+        Ricer_START = 200,      //200
+        Ricer_WAKE_UP,          //201
+        Ricer_WAKE_UP_DATA,     //202
+        Ricer_CCA_TIMEOUT,      //203
+        Ricer_DATA_TX_OVER,     //204
+        Ricer_BEACON_TX_OVER,   //205
+        Ricer_ACK_TIMEOUT,      //206
+        Ricer_ACK_TX_OVER,      //207
+        Ricer_BEACON_TIMEOUT,   //208
+        Ricer_DATA_TIMEOUT,     //209
     };
 
-    // messages used in the FSM
-    cMessage *wakeup;
-    cMessage *wakeup_data;
-    cMessage *data_timeout;
-    cMessage *data_tx_over;
-    cMessage *beacon_tx_over;
-    cMessage *wait_over;
-    cMessage *ack_tx_over;
-    cMessage *cca_timeout;
-    cMessage *ack_timeout;
-    cMessage *start_Ricer;
+    // messages used as the events
+    cMessage *wakeup;           // wake up event - used in destination & relay: wake up to send WB
+    cMessage *wakeup_data;      // wake up to send data event - used in sources
+    cMessage *data_timeout;     // wait DATA time out event
+    cMessage *data_tx_over;     // sending data finished event
+    cMessage *beacon_tx_over;   // sending WB finished event
+    cMessage *beacon_timeout;   // wait WB timeout event
+    cMessage *ack_tx_over;      // sending ACK finished event
+    cMessage *cca_timeout;      // finish channel check event
+    cMessage *ack_timeout;      // wait ACK time out event
+    cMessage *start;            // start protocol event
 
-    MacPkt   *dupdata;
     /** @name Help variables for the acknowledgment process. */
     /*@{*/
     LAddress::L2Type lastDataPktSrcAddr;
     LAddress::L2Type lastDataPktDestAddr;
-    LAddress::L2Type relayAddr;
     LAddress::L2Type forwardAddr;
     int txAttempts;
     /*@}*/
@@ -244,11 +220,7 @@ class MIXIM_API RicerLayer : public BaseMacLayer
     double headerLength;
     /** @brief The duration of CCA */
     double checkInterval;
-    double wakeupTime;
-    double buzzduration;
-    double dataduration;
-    double initialization;
-    bool randInit;
+    double iwu;
 
     int nbSlot;
     /** @brief Transmission power of the node */
@@ -273,6 +245,11 @@ class MIXIM_API RicerLayer : public BaseMacLayer
         YELLOW = 5
     };
 
+    /**
+     * variable used to calculate in protocol
+     */
+    double wakeupTime;
+
     /** @brief Internal function to change the color of the node */
     void changeDisplayColor(Ricer_COLORS color);
 
@@ -284,7 +261,6 @@ class MIXIM_API RicerLayer : public BaseMacLayer
 
     /** @brief Internal function to send one beacon */
     void sendBeacon();
-    void sendBuzz();
     void sendRelayData();
     /** @brief Internal function to attach a signal to the packet */
     void attachSignal(MacPkt *macPkt);

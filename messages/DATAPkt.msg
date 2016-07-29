@@ -13,7 +13,7 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 //
 //**************************************************************************
-// * file:        MacPktWB.msg
+// * file:        MacPktFTA.msg
 // *
 // * author:      Nguyen Van Thiep
 // *
@@ -40,10 +40,10 @@ cplusplus {{
 class LAddress::L2Type extends void;
 class MacPkt;
 
-packet MacPktWB extends MacPkt
+packet DATAPkt extends MacPkt
 {
     LAddress::L2Type destAddr; // destination mac address
     LAddress::L2Type srcAddr;  // source mac address
 //    long             sequenceId; // Sequence Number to detect duplicate messages
-	bool           forwarded;  // This WB packet already forwarded
+	DATAPkt       packets[];           
 }

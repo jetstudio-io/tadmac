@@ -30,7 +30,6 @@
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
 #include <MacPktFTA_m.h>
-#include <MacPktWB_m.h>
 
 using namespace std;
 
@@ -65,7 +64,6 @@ public:
     {}
 
     typedef MacPktFTA* macpktfta_ptr_t;
-    typedef MacPktWB* macpktwb_prt_t;
 
     virtual ~FTAMacLayer();
 
@@ -97,13 +95,14 @@ public:
     virtual void handleLowerControl(cMessage *msg);
 
 protected:
-    typedef std::list<macpkt_ptr_t> MacQueue;
+    typedef std::list<macpktfta_ptr_t> MacQueue;
+    typedef std::list<macpkt_ptr_t> ACKQueue;
 
     /** @brief A queue to store packets from upper layer in case another
      packet is still waiting for transmission.*/
     MacQueue macQueue;
     // A queue to store ACK packets need to be sent
-    MacQueue ackQueue;
+    ACKQueue ackQueue;
 
     /** @name Different tracked statistics.*/
     /*@{*/
@@ -133,6 +132,8 @@ protected:
     simtime_t startWake;
     /** store the moment the sender wait for WB */
     double timeWaitWB;
+
+    int dataLen;
 
     double wakeupInterval;
     double waitCCA;

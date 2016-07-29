@@ -44,12 +44,12 @@ import org.mixim.base.modules.BaseMacLayer;
 // Version 3.0: multi-hop communication: single sender with routing table fixed
 //****************
 
-simple FTAMacLayer extends BaseMacLayer
+simple PWMacLayer extends BaseMacLayer
 {
     parameters:
-        @class(FTAMacLayer);
+        @class(PWMacLayer);
         //*********
-        // Sepcific parameters for FTAMAC
+        // Sepcific parameters for PW-MAC
         //*********
         
         // Define the role of node
@@ -57,6 +57,10 @@ simple FTAMacLayer extends BaseMacLayer
         // 1 - sender
         // 2 - transmiter (default)
         int role = default(2);
+        
+        int m = default(501);
+        int a = default(1);
+        int c = default(0);
         
         // time for CCA
         double waitCCA @unit(s) = default(0.005s); //CCA time 5ms
@@ -86,8 +90,6 @@ simple FTAMacLayer extends BaseMacLayer
         
         // used to define number sender in network - for receiver node
         int numberSender = default(1);
-        
-        int dataLen = default(13);
         
         // debug switch
         bool debug = default(false);

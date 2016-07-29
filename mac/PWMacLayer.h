@@ -13,8 +13,8 @@
 // along with this program.  If not, see http://www.gnu.org/licenses/.
 // 
 
-#ifndef PWLAYER_H_
-#define PWLAYER_H_
+#ifndef PWMACLAYER_H_
+#define PWMACLAYER_H_
 
 #include <string>
 #include <sstream>
@@ -24,32 +24,35 @@
 #include "MiXiMDefs.h"
 #include "BaseMacLayer.h"
 #include <DroppedPacket.h>
+#include <MacPktFTA_m.h>
 
 class MacPkt;
+class MacPktPWWB;
 
 /**
- * @class PWLayer
+ * @class PWMacLayer
  * @ingroup macLayer
  *
  */
-class MIXIM_API PWLayer : public BaseMacLayer
+class MIXIM_API PWMacLayer : public BaseMacLayer
 {
   private:
 	/** @brief Copy constructor is not allowed.
 	 */
-	PWLayer(const PWLayer&);
+	PWMacLayer(const PWMacLayer&);
 	/** @brief Assignment operator is not allowed.
 	 */
-	PWLayer& operator=(const PWLayer&);
+	PWMacLayer& operator=(const PWMacLayer&);
 
   public:
-	PWLayer()
+	PWMacLayer()
 		: BaseMacLayer()
 		, macQueue()
 		, nbTxDataPackets(0), nbTxBeacons(0), nbRxDataPackets(0), nbRxBeacons(0)
 		, nbMissedAcks(0), nbRecvdAcks(0), nbDroppedDataPackets(0), nbTxAcks(0)
+        , nbPacketDrop(0), nbTxRelayData(0)
 		, macState(INIT)
-		, resend_data(NULL), ack_timeout(NULL), start_Ricer(NULL), wakeup(NULL)
+		, resend_data(NULL), ack_timeout(NULL), start(NULL), wakeup(NULL)
 		, send_ack(NULL), cca_timeout(NULL), ack_tx_over(NULL), send_beacon(NULL), wait_over(NULL)
 		, data_tx_over(NULL), data_timeout(NULL)
 		, lastDataPktSrcAddr()
@@ -64,7 +67,7 @@ class MIXIM_API PWLayer : public BaseMacLayer
 		, maxTxAttempts(0)
 		, stats(false)
 	{}
-	virtual ~PWLayer();
+	virtual ~PWMacLayer();
 
     /** @brief Initialization of the module and some variables*/
     virtual void initialize(int);
@@ -85,6 +88,7 @@ class MIXIM_API PWLayer : public BaseMacLayer
     virtual void handleLowerControl(cMessage *msg);
 
   protected:
+    typedef MacPktPWWB* pwwb_ptr_t;
     typedef std::list<MacPkt*> MacQueue;
 
     /** @brief A queue to store packets from upper layer in case another
@@ -105,7 +109,6 @@ class MIXIM_API PWLayer : public BaseMacLayer
 	long nbPacketDrop;
 	long nbTxRelayData;
 	long nbRxRelayData;
-	long nbTxBuzz;
 	/*@}*/
 
 	/** @brief MAC states
@@ -129,20 +132,20 @@ class MIXIM_API PWLayer : public BaseMacLayer
 	*  				  over
 	*/
 	enum States {
-		INIT,	//0
-		SLEEP,	//1
-		CCA,	//2
-		SEND_BEACON, 	//3
-		WAIT_DATA,		//4
-		SEND_DATA,		//5
+		INIT,	            //0
+		SLEEP,	            //1
+		CCA,	            //2
+		SEND_BEACON, 	    //3
+		WAIT_DATA,		    //4
+		SEND_DATA,		    //5
 		WAIT_TX_DATA_OVER,	//6
-		WAIT_ACK,		//7
-		SEND_ACK,		//8
+		WAIT_ACK,		    //7
+		SEND_ACK,		    //8
 		WAIT_ACK_TX,		//9
-		WAIT_BEACON,  //10
-		WAIT_RELAY,   //11
-		SEND_BUZZ,    //12
-		WAIT_BUZZ,    //13
+		WAIT_BEACON,        //10
+		WAIT_RELAY,         //11
+		SEND_BUZZ,          //12
+		WAIT_BUZZ,          //13
 		SEND_RELAYDATA
 	  };
 	/** @brief The current state of the protocol */
@@ -153,27 +156,16 @@ class MIXIM_API PWLayer : public BaseMacLayer
 	enum TYPES {
 		// packet types
 	    PW_DATA = 191,
-	    PW_BEACON,  //192
-		PW_BUZZ,     //193
-		PW_RELAYDATA,  //194
-		PW_ACK,          //195
+	    PW_BEACON,          //192
+		PW_BUZZ,            //193
+		PW_RELAYDATA,       //194
+		PW_ACK,             //195
 		// self message types
-		PW_RESEND_DATA,   //196
-		PW_ACK_TIMEOUT,   //197
-		PW_START,    //198
-		PW_WAKE_UP,        //199
-		PW_SEND_ACK,       //200
-		PW_CCA_TIMEOUT,     //201
-		PW_ACK_TX_OVER,
-		PW_SEND_BEACON,     //203
-		PW_WAIT_OVER,
-		PW_DATA_TX_OVER,     //205
-		PW_DATA_TIMEOUT,
-		PW_RELAY_TIMEOUT,
-		PW_BUZZ_TIMEOUT,     //208
-		PW_SEND_BUZZ,       //209
-		PW_SEND_RELAYDATA
-
+		PW_START,
+		PW_WAKEUP,
+		PW_WAKEUP_DATA,
+		PW_CCA_WB,
+		PW_CCA_
 	};
 
 	// messages used in the FSM
@@ -203,6 +195,10 @@ class MIXIM_API PWLayer : public BaseMacLayer
 	int buzztx;
 	/*@}*/
 
+	/**
+	 * pesudo random prediction wakeup parameters
+	 */
+	int m, a, c;
 
 	/** @brief Inspect reasons for dropped packets */
 	DroppedPacket droppedPacket;
@@ -270,4 +266,4 @@ class MIXIM_API PWLayer : public BaseMacLayer
 	bool addToQueue(cMessage * msg);
 };
 
-#endif /* PWLAYER_H_ */
+#endif /* PWMacLayer_H_ */
