@@ -26,7 +26,6 @@
 #include <DroppedPacket.h>
 #include "DATAPkt_m.h"
 
-class MacPkt;
 class DATAPkt;
 
 

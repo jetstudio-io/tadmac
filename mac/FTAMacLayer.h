@@ -31,6 +31,8 @@
 #include <DroppedPacket.h>
 #include <MacPktFTA_m.h>
 
+class MacPktFTA;
+
 using namespace std;
 
 /**
